@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAINSVILLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0B0B0D;
+    --surface: #17161A;
+    --surface-2: #201F26;
+    --line: #2E2C33;
+    --text: #F5F4F7;
+    --text-muted: #8B899B;
+    --purple: #8B5CF6;
+    --purple-soft: #C7B6F5;
+    --purple-strong-bg: rgba(139,92,246,.24);
+    --purple-dim: #3E3252;
+    --rose: #C1476B;
+    --rose-soft: rgba(193,71,107,.16);
+    --grey-soft-bg: rgba(139,137,155,.14);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+  .wrap{max-width:720px;margin:0 auto;padding:20px 16px 90px;}
+
+  header{display:flex;align-items:baseline;justify-content:space-between;padding:18px 0 14px;border-bottom:2px solid var(--line);margin-bottom:18px;}
+  .wordmark{font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;letter-spacing:2px;color:var(--text);}
+  .wordmark span{color:var(--purple);}
+  .tagline{font-size:11px;color:var(--text-muted);letter-spacing:1.5px;text-transform:uppercase;}
+
+  nav.tabs{display:flex;gap:6px;margin-bottom:22px;}
+  nav.tabs button{flex:1;padding:11px 6px;background:var(--surface);border:1px solid var(--line);color:var(--text-muted);font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border-radius:3px;transition:.15s;}
+  nav.tabs button.active{background:var(--purple);color:#0B0B0D;border-color:var(--purple);font-weight:600;}
+  nav.tabs button:not(.active):hover{border-color:var(--text-muted);color:var(--text);}
+
+  .view{display:none;}
+  .view.active{display:block;}
+
+  h2.section-title{font-family:'Oswald',sans-serif;font-size:15px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:16px;}
+  .card p.hint{font-size:13px;color:var(--text-muted);line-height:1.5;margin:0 0 12px;}
+
+  input[type=text], input[type=number], select{
+    background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:4px;
+    padding:9px 10px;font-family:'Inter',sans-serif;font-size:14px;width:100%;
+  }
+  input[list]{background:var(--surface-2);}
+  label.field-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+  .field-row.cols-3{grid-template-columns:1fr 1fr 1fr;}
+
+  .btn{display:inline-block;padding:10px 18px;background:var(--purple);color:#0B0B0D;border:none;border-radius:4px;font-family:'Oswald',sans-serif;font-weight:600;font-size:13px;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;}
+  .btn:hover{background:var(--purple-soft);}
+  .btn.secondary{background:transparent;border:1px solid var(--line);color:var(--text);}
+  .btn.secondary:hover{border-color:var(--text-muted);}
+  .btn.small{padding:6px 12px;font-size:11px;}
+  .btn.danger{background:transparent;border:1px solid var(--rose);color:var(--rose);}
+  .btn.ghost-confirm{background:var(--rose);color:#0B0B0D;border:none;}
+  .btn-row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center;}
+
+  .day-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+  .day-chip{padding:9px 16px;background:transparent;border:1.5px solid var(--purple);border-radius:100px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.5px;cursor:pointer;color:var(--purple);}
+  .day-chip.active{background:var(--purple);color:#0B0B0D;border-color:var(--purple);font-weight:600;}
+
+  .exercise-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);}
+  .exercise-row:last-child{border-bottom:none;}
+  .exercise-row .ex-name{font-weight:500;}
+  .exercise-row .ex-meta{font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;}
+  .exercise-row .remove-x{color:var(--rose);cursor:pointer;font-size:16px;padding:0 6px;}
+
+  .exercise-block{margin-bottom:16px;}
+  .exercise-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:10px;}
+  .exercise-name{font-family:'Oswald',sans-serif;font-size:17px;font-weight:600;}
+  .exercise-target{font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;}
+
+  .set-row{display:grid;grid-template-columns:26px 1fr 1fr 1fr;gap:8px;align-items:center;margin-bottom:6px;}
+  .set-label{font-family:'JetBrains Mono',monospace;color:var(--text-muted);font-size:12px;}
+  .set-row input{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:9px 6px;font-family:'JetBrains Mono',monospace;font-size:14px;width:100%;text-align:center;color:var(--text);transition:.15s;}
+  .set-row input::placeholder{color:var(--text-muted);opacity:.65;}
+  .set-row input:focus{outline:none;border-color:var(--purple);}
+  .set-row input.ghost-increase{color:var(--purple-soft);background:var(--purple-strong-bg);border-color:var(--purple);font-weight:600;}
+  .set-row input.ghost-maintain{color:var(--text-muted);}
+  .set-row input.ghost-decrease{color:var(--rose);background:var(--rose-soft);}
+  .set-row input.ghost-increase::placeholder{color:var(--purple-soft);opacity:.85;}
+  .set-row input.ghost-maintain::placeholder{color:var(--text-muted);opacity:.85;}
+  .set-row input.ghost-decrease::placeholder{color:var(--rose);opacity:.85;}
+  .set-header-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;text-align:center;}
+  .set-warning{font-size:11px;color:var(--rose);margin:-2px 0 10px;line-height:1.35;display:none;padding-left:34px;}
+  .set-warning.show{display:block;}
+
+  .pyramid-row{display:grid;grid-template-columns:26px 1fr 1fr;gap:8px;align-items:center;margin-bottom:6px;}
+
+  .plate-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;border-radius:100px;font-family:'Oswald',sans-serif;font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;}
+  .plate-badge .ring{width:20px;height:20px;border-radius:50%;border:2px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}
+  .badge-increase{background:var(--purple-strong-bg);color:var(--purple-soft);}
+  .badge-maintain{background:var(--grey-soft-bg);color:var(--text-muted);}
+  .badge-decrease{background:var(--rose-soft);color:var(--rose);}
+  .badge-new{background:var(--grey-soft-bg);color:var(--text-muted);}
+
+  .reco-text{font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.4;}
+
+  .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);}
+  .empty-state .big{font-family:'Oswald',sans-serif;font-size:16px;color:var(--text);margin-bottom:6px;}
+
+  .week-drawer{border:1px solid var(--line);border-radius:6px;margin-bottom:10px;overflow:hidden;}
+  .week-drawer-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--surface-2);cursor:pointer;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.5px;}
+  .week-drawer-header .chevron{color:var(--text-muted);transition:transform .15s;}
+  .week-drawer-header.open .chevron{transform:rotate(180deg);}
+  .week-drawer-body{display:none;padding:10px 14px 14px;}
+  .week-drawer-body.open{display:block;}
+  .week-summary-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;}
+  .week-summary-row:last-child{border-bottom:none;}
+  .week-summary-row .wn{color:var(--text-muted);}
+  .week-summary-row .wv{font-family:'JetBrains Mono',monospace;text-align:right;}
+
+  .history-item{border-bottom:1px solid var(--line);padding:10px 0;}
+  .history-item:last-child{border-bottom:none;}
+  .history-date{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;}
+  .history-sets{font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:3px;}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--purple);color:#0B0B0D;padding:12px 22px;border-radius:6px;font-family:'Oswald',sans-serif;font-weight:600;font-size:13px;letter-spacing:.5px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:100;}
+  .toast.show{opacity:1;}
+
+  .inline-form{display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);}
+  .inline-form.open{display:block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="wordmark">GAINS<span>VILLE</span></div>
+      <div class="tagline">Build. Log. Adjust.</div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="build">Build</button>
+    <button class="tab-btn" data-tab="train">Train</button>
+    <button class="tab-btn" data-tab="progress">Progress</button>
+  </nav>
+
+  <div class="view active" id="view-build">
+    <h2 class="section-title">Days</h2>
+    <div class="day-tabs" id="buildDayTabs"></div>
+
+    <div class="card" id="addDayCard">
+      <p class="hint">Add a training day, then select exercises into it below. Weeks get logged in the Train tab — you don't need to duplicate days.</p>
+      <div class="field-row">
+        <input type="text" id="newDayName" placeholder="e.g. Push A">
+        <button class="btn" id="addDayBtn">Add Day</button>
+      </div>
+      <div id="demoDataRow" style="margin-top:10px;">
+        <button class="btn secondary small" id="loadDemoBtn">Load Demo Data</button>
+      </div>
+    </div>
+
+    <div id="dayBuilderContent"></div>
+  </div>
+
+  <div class="view" id="view-train">
+    <div id="trainContent">
+      <div class="empty-state"><div class="big">No program yet</div>Build a day in the Build tab first.</div>
+    </div>
+  </div>
+
+  <div class="view" id="view-progress">
+    <div id="progressContent">
+      <div class="empty-state"><div class="big">Nothing logged yet</div>Log a week in the Train tab to start tracking progress.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+<datalist id="exerciseLibrary"></datalist>
+
+<script>
+// ---------- State ----------
+let program = JSON.parse(localStorage.getItem('gv_program') || '{"days":[]}');
+program.days.forEach(d=>{ if(!d.weeks) d.weeks = []; d.exercises.forEach(ex=>{ delete ex.lineageId; }); });
+let activeBuildDay = program.days[0] ? program.days[0].name : null;
+let activeTrainDay = null;
+let removeConfirmDay = null;
+let pyramidTargetsTemp = [];
+let demoConfirmPending = false;
+let openDrawers = new Set();
+let editingWeekKey = null;
+let deleteConfirmWeekKey = null;
+
+function weekNumberFromKey(key){ return parseInt(key.substring(key.lastIndexOf('_')+1)); }
+
+function autosaveExerciseDraft(day, week, ex){
+  const inputs = document.querySelectorAll(`[data-ex="${ex.id}"]`);
+  const setsData = {};
+  inputs.forEach(inp=>{
+    const idx = inp.dataset.set;
+    if(!setsData[idx]) setsData[idx] = {};
+    setsData[idx][inp.dataset.field] = parseFloat(inp.value) || 0;
+  });
+  week.exerciseSets[ex.id] = Object.keys(setsData).sort((a,b)=>a-b).map(k=>setsData[k]);
+  saveProgram();
+}
+
+function saveProgram(){ localStorage.setItem('gv_program', JSON.stringify(program)); }
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+function updateExerciseLibrary(){
+  const names = new Set();
+  program.days.forEach(d=>d.exercises.forEach(e=>names.add(e.name)));
+  document.getElementById('exerciseLibrary').innerHTML = [...names].map(n=>`<option value="${n}">`).join('');
+}
+
+// ---------- Tabs ----------
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='build') renderBuild();
+    if(btn.dataset.tab==='train'){ activeTrainDay = null; renderTrain(); }
+    if(btn.dataset.tab==='progress') renderProgress();
+  });
+});
+
+// ---------- Build tab: days ----------
+document.getElementById('addDayBtn').addEventListener('click', ()=>{
+  const nameInput = document.getElementById('newDayName');
+  const name = nameInput.value.trim();
+  if(!name){ showToast('Name the day first'); return; }
+  if(program.days.find(d=>d.name===name)){ showToast('That day already exists'); return; }
+  program.days.push({name, exercises:[], weeks:[]});
+  saveProgram();
+  nameInput.value = '';
+  activeBuildDay = name;
+  renderBuild();
+  showToast('Day added: ' + name);
+});
+
+function makeId(prefix){ return prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
+
+function loadDemoData(){
+  const benchId = makeId('ex'), ohpId = makeId('ex'), pullupId = makeId('ex'), inclineId = makeId('ex');
+  const pushA = {
+    name: 'Push A',
+    exercises: [
+      { id: benchId, name:'Bench Press', sets:3, type:'straight', repMin:6, repMax:9, weight:185, unit:'lbs', idealRpe:8 },
+      { id: ohpId, name:'Overhead Press', sets:3, type:'pyramid', setTargets:[{repMin:6,repMax:9},{repMin:8,repMax:10},{repMin:10,repMax:12}], repMin:6, repMax:12, weight:95, unit:'lbs', idealRpe:8 },
+      { id: pullupId, name:'Pull-ups', sets:3, type:'straight', repMin:8, repMax:12, weight:0, unit:'bw', idealRpe:8 }
+    ],
+    weeks: [
+      { number:1, date:'2026-07-08', completed:true, exerciseSets: {
+          [benchId]: [{reps:9,weight:185,rpe:7},{reps:9,weight:185,rpe:7},{reps:9,weight:185,rpe:7}],
+          [ohpId]: [{reps:6,weight:95,rpe:8},{reps:8,weight:85,rpe:8},{reps:10,weight:75,rpe:8}],
+          [pullupId]: [{reps:6,weight:0,rpe:9},{reps:5,weight:0,rpe:9},{reps:5,weight:0,rpe:9}]
+      }},
+      { number:2, date:'2026-07-15', completed:false, exerciseSets: {} }
+    ]
+  };
+  const pushB = {
+    name: 'Push B',
+    exercises: [
+      { id: inclineId, name:'Incline Bench', sets:3, type:'straight', repMin:8, repMax:12, weight:135, unit:'lbs', idealRpe:8 }
+    ],
+    weeks: []
+  };
+  program = { days: [pushA, pushB] };
+  saveProgram();
+  activeBuildDay = 'Push A';
+  activeTrainDay = null;
+  openDrawers = new Set();
+  editingWeekKey = null;
+  deleteConfirmWeekKey = null;
+  renderBuild();
+  showToast('Demo data loaded');
+}
+
+function attachLoadDemoListener(){
+  const btn = document.getElementById('loadDemoBtn');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    const row = document.getElementById('demoDataRow');
+    row.innerHTML = `<span style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:8px;">This replaces your current program and history. Continue?</span>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="btn ghost-confirm small" id="confirmDemoBtn">Yes, load demo</button>
+        <button class="btn secondary small" id="cancelDemoBtn">Cancel</button>
+      </div>`;
+    document.getElementById('confirmDemoBtn').addEventListener('click', ()=>{
+      loadDemoData();
+      row.innerHTML = '<button class="btn secondary small" id="loadDemoBtn">Load Demo Data</button>';
+      attachLoadDemoListener();
+    });
+    document.getElementById('cancelDemoBtn').addEventListener('click', ()=>{
+      row.innerHTML = '<button class="btn secondary small" id="loadDemoBtn">Load Demo Data</button>';
+      attachLoadDemoListener();
+    });
+  });
+}
+attachLoadDemoListener();
+
+function renderPyramidRows(setsCount){
+  while(pyramidTargetsTemp.length < setsCount) pyramidTargetsTemp.push({repMin: 8, repMax: 12});
+  pyramidTargetsTemp.length = setsCount;
+  const container = document.getElementById('pyramidRows');
+  if(!container) return;
+  container.innerHTML = pyramidTargetsTemp.map((t,i)=>`
+    <div class="pyramid-row">
+      <div class="set-label">${i+1}</div>
+      <input type="number" class="pyr-min" data-idx="${i}" value="${t.repMin}" placeholder="rep min">
+      <input type="number" class="pyr-max" data-idx="${i}" value="${t.repMax}" placeholder="rep max">
+    </div>
+  `).join('');
+  container.querySelectorAll('.pyr-min').forEach(inp=>inp.addEventListener('input', ()=>{ pyramidTargetsTemp[inp.dataset.idx].repMin = parseInt(inp.value) || 0; }));
+  container.querySelectorAll('.pyr-max').forEach(inp=>inp.addEventListener('input', ()=>{ pyramidTargetsTemp[inp.dataset.idx].repMax = parseInt(inp.value) || 0; }));
+}
+
+function refreshFormLayout(){
+  const type = document.getElementById('exType').value;
+  const sets = parseInt(document.getElementById('exSets').value) || 1;
+  document.getElementById('straightFields').style.display = type==='pyramid' ? 'none' : 'grid';
+  document.getElementById('pyramidFields').style.display = type==='pyramid' ? 'block' : 'none';
+  if(type==='pyramid') renderPyramidRows(sets);
+}
+
+function renderBuild(){
+  updateExerciseLibrary();
+  const dayTabs = document.getElementById('buildDayTabs');
+  if(!program.days.length){
+    dayTabs.innerHTML = '';
+    document.getElementById('dayBuilderContent').innerHTML = '';
+    return;
+  }
+  if(!activeBuildDay || !program.days.find(d=>d.name===activeBuildDay)) activeBuildDay = program.days[0].name;
+
+  dayTabs.innerHTML = program.days.map(d=>`<div class="day-chip ${d.name===activeBuildDay?'active':''}" data-day="${d.name}">${d.name}</div>`).join('');
+  dayTabs.querySelectorAll('.day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeBuildDay = chip.dataset.day; renderBuild(); }));
+
+  const day = program.days.find(d=>d.name===activeBuildDay);
+  const exerciseRows = day.exercises.map(ex=>{
+    const targetDesc = ex.type==='pyramid' ? ex.setTargets.map(t=>t.repMin+'-'+t.repMax).join(' / ') : `${ex.repMin}-${ex.repMax} × ${ex.sets}`;
+    const restLabel = restLabelFor(ex.movementType);
+    return `
+    <div class="exercise-row">
+      <div>
+        <div class="ex-name">${ex.name}</div>
+        <div class="ex-meta">${ex.sets} sets &middot; ${targetDesc} &middot; start ${ex.weight} ${ex.unit} &middot; RPE target ${ex.idealRpe} &middot; ${restLabel}</div>
+      </div>
+      <div class="remove-x" data-remove-ex="${ex.id}">&times;</div>
+    </div>`;
+  }).join('') || '<p class="hint" style="margin:8px 0 0;">No exercises in this day yet.</p>';
+
+  const removeControlsHTML = (removeConfirmDay === day.name)
+    ? `<span style="font-size:12px;color:var(--text-muted);align-self:center;">Remove ${day.name} and all its history?</span>
+       <button class="btn ghost-confirm small" id="confirmRemoveBtn">Yes, remove</button>
+       <button class="btn secondary small" id="cancelRemoveBtn">Cancel</button>`
+    : `<button class="btn secondary small danger" id="removeDayBtn">Remove ${day.name}</button>`;
+
+  document.getElementById('dayBuilderContent').innerHTML = `
+    <div class="card">
+      <h2 class="section-title" style="margin-bottom:6px;">${day.name} — exercises</h2>
+      ${exerciseRows}
+      <div class="btn-row">
+        <button class="btn small" id="toggleAddExBtn">+ Add Exercise</button>
+        ${removeControlsHTML}
+      </div>
+      <div class="inline-form" id="addExForm">
+        <label class="field-label">Exercise name</label>
+        <input type="text" id="exName" list="exerciseLibrary" placeholder="Start typing or select from history">
+        <div class="field-row cols-3" style="margin-top:10px;">
+          <div><label class="field-label">Sets</label><input type="number" id="exSets" value="3" min="1"></div>
+          <div><label class="field-label">Type</label>
+            <select id="exType">
+              <option value="straight">Straight sets</option>
+              <option value="pyramid">Pyramid (per-set range)</option>
+            </select>
+          </div>
+          <div><label class="field-label">Ideal RPE</label><input type="number" id="exIdealRpe" value="8" min="1" max="10" step="0.5"></div>
+        </div>
+        <div class="field-row cols-3" id="straightFields">
+          <div><label class="field-label">Rep min</label><input type="number" id="exRepMin" value="8"></div>
+          <div><label class="field-label">Rep max</label><input type="number" id="exRepMax" value="12"></div>
+          <div></div>
+        </div>
+        <div id="pyramidFields" style="display:none;">
+          <label class="field-label">Per-set rep targets</label>
+          <div id="pyramidRows"></div>
+        </div>
+        <div class="field-row" style="margin-top:0;">
+          <div><label class="field-label">Starting weight</label><input type="number" id="exWeight" value="0"></div>
+          <div><label class="field-label">Unit</label>
+            <select id="exUnit"><option value="lbs">lbs</option><option value="kg">kg</option><option value="bw">bodyweight</option></select>
+          </div>
+        </div>
+        <div class="field-row" style="margin-top:0;">
+          <div><label class="field-label">Movement type</label>
+            <select id="exMovementType">
+              <option value="compound">Compound (rest ~2-3 min)</option>
+              <option value="isolation">Isolation (rest ~60-90 sec)</option>
+            </select>
+          </div>
+          <div></div>
+        </div>
+        <div class="btn-row"><button class="btn" id="saveExBtn">Add to ${day.name}</button></div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('toggleAddExBtn').addEventListener('click', ()=>{
+    pyramidTargetsTemp = [];
+    document.getElementById('addExForm').classList.toggle('open');
+    refreshFormLayout();
+  });
+  document.getElementById('exType').addEventListener('change', refreshFormLayout);
+  document.getElementById('exSets').addEventListener('input', refreshFormLayout);
+
+  if(removeConfirmDay === day.name){
+    document.getElementById('confirmRemoveBtn').addEventListener('click', ()=>{
+      program.days = program.days.filter(d=>d.name !== day.name);
+      saveProgram();
+      removeConfirmDay = null;
+      activeBuildDay = program.days[0] ? program.days[0].name : null;
+      renderBuild();
+      showToast('Day removed');
+    });
+    document.getElementById('cancelRemoveBtn').addEventListener('click', ()=>{
+      removeConfirmDay = null;
+      renderBuild();
+    });
+  } else {
+    document.getElementById('removeDayBtn').addEventListener('click', ()=>{
+      removeConfirmDay = day.name;
+      renderBuild();
+    });
+  }
+
+  document.getElementById('saveExBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('exName').value.trim();
+    if(!name){ showToast('Name the exercise first'); return; }
+    const sets = parseInt(document.getElementById('exSets').value) || 3;
+    const type = document.getElementById('exType').value;
+    const idealRpe = parseFloat(document.getElementById('exIdealRpe').value) || 8;
+    const movementType = document.getElementById('exMovementType').value;
+    const unit = document.getElementById('exUnit').value;
+    const weight = parseFloat(document.getElementById('exWeight').value) || 0;
+    const newId = 'ex_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    const base = { id:newId, name, sets, unit, weight, idealRpe, type, movementType };
+    if(type==='pyramid'){
+      base.setTargets = pyramidTargetsTemp.slice(0, sets);
+      base.repMin = base.setTargets[0] ? base.setTargets[0].repMin : 8;
+      base.repMax = base.setTargets[base.setTargets.length-1] ? base.setTargets[base.setTargets.length-1].repMax : 12;
+    } else {
+      base.repMin = parseInt(document.getElementById('exRepMin').value) || 8;
+      base.repMax = parseInt(document.getElementById('exRepMax').value) || 12;
+    }
+    day.exercises.push(base);
+    saveProgram();
+    renderBuild();
+    showToast(name + ' added');
+  });
+
+  document.querySelectorAll('[data-remove-ex]').forEach(x=>{
+    x.addEventListener('click', ()=>{
+      day.exercises = day.exercises.filter(e=>e.id !== x.dataset.removeEx);
+      saveProgram();
+      renderBuild();
+    });
+  });
+}
+
+// ---------- Helpers shared by Train + Progress ----------
+function getSetTarget(exercise, setIndex){
+  if(exercise.type==='pyramid' && exercise.setTargets && exercise.setTargets[setIndex]) return exercise.setTargets[setIndex];
+  return { repMin: exercise.repMin, repMax: exercise.repMax };
+}
+
+function restLabelFor(movementType){
+  return movementType === 'isolation' ? 'Isolation · rest ~60-90 sec' : 'Compound · rest ~2-3 min';
+}
+
+function getPreviousCompletedWeekData(day, exerciseId, beforeWeekNumber){
+  const completed = day.weeks.filter(w=>w.completed && w.number < (beforeWeekNumber || Infinity)).sort((a,b)=>b.number-a.number);
+  for(const w of completed){
+    if(w.exerciseSets[exerciseId] && w.exerciseSets[exerciseId].length){
+      return { week:w, sets: w.exerciseSets[exerciseId] };
+    }
+  }
+  return null;
+}
+
+function avgRPE(sets){
+  const rpes = sets.map(s=>s.rpe).filter(r=> r > 0);
+  if(!rpes.length) return null;
+  return rpes.reduce((a,b)=>a+b,0) / rpes.length;
+}
+
+function getRecommendation(day, exercise, beforeWeekNumber){
+  const prev = getPreviousCompletedWeekData(day, exercise.id, beforeWeekNumber);
+  if(!prev){
+    return { type:'new', label:'First Session', detail:'No history yet for this exercise in this workout — hit the target ranges shown and log your actual numbers.', prev:null };
+  }
+  const reps = prev.sets.map(s=>s.reps);
+  const rpe = avgRPE(prev.sets);
+  const isBodyweight = exercise.unit === 'bw';
+  const increment = exercise.unit === 'kg' ? 2.5 : 5;
+
+  let hitMax = true, hitMin = true;
+  reps.forEach((r,i)=>{
+    const t = getSetTarget(exercise, i);
+    if(r < t.repMax) hitMax = false;
+    if(r < t.repMin) hitMin = false;
+  });
+
+  let type, label, detail;
+  const increaseAction = isBodyweight
+    ? `add reps, slow the tempo, or start adding external load (try +${increment} lbs via a vest or belt)`
+    : `try +${increment} ${exercise.unit}`;
+  const decreaseAction = isBodyweight
+    ? `ease off with fewer reps, more rest, or drop ${increment} lbs of any added weight you're using`
+    : (increment ? `consider dropping ${increment} ${exercise.unit} or focusing on form` : 'consider an easier variation or more rest');
+
+  if(rpe !== null && rpe <= 6){
+    type='increase'; label='Increase';
+    detail = `RPE was only ${rpe.toFixed(1)} last week — that's an easy effort regardless of reps hit, so ${increaseAction}.`;
+  } else if(hitMax && (rpe===null || rpe <= 8)){
+    type='increase'; label='Increase';
+    detail = `Hit the top of every set's rep target last week` + (rpe!==null ? ` at RPE ${rpe.toFixed(1)} — room to push harder.` : '.') + ` Try to ${increaseAction}.`;
+  } else if(hitMax && rpe > 8){
+    type='maintain'; label='Maintain';
+    detail = `Hit the top of your targets, but RPE was ${rpe.toFixed(1)} — that was close to max effort. Hold steady and let reps stabilize before pushing further.`;
+  } else if(hitMin){
+    type='maintain'; label='Maintain';
+    detail = `Hit the low end of your targets but not the top on every set. Keep things as they are and push for more reps next time.`;
+  } else {
+    type='decrease'; label='Lower';
+    detail = `Missed the rep target on at least one set last week. Maybe ${decreaseAction}.`;
+  }
+  return { type, label, detail, prev, increment, isBodyweight };
+}
+
+function badgeHTML(reco){
+  const icons = { new:'—', increase:'▲', maintain:'●', decrease:'▼' };
+  return `<div class="plate-badge badge-${reco.type}"><span class="ring">${icons[reco.type]}</span>${reco.label}</div>`;
+}
+
+// ---------- Train tab ----------
+function renderTrain(){
+  const container = document.getElementById('trainContent');
+  if(!program.days.length){
+    container.innerHTML = '<div class="empty-state"><div class="big">No program yet</div>Build a day in the Build tab first.</div>';
+    return;
+  }
+  if(activeTrainDay && !program.days.find(d=>d.name===activeTrainDay)) activeTrainDay = null;
+
+  if(!activeTrainDay){
+    container.innerHTML = `
+      <h2 class="section-title">Which workout are you doing?</h2>
+      <div class="day-tabs" id="trainDaySelect">${program.days.map(d=>`<div class="day-chip" data-day="${d.name}">${d.name}</div>`).join('')}</div>
+    `;
+    document.querySelectorAll('#trainDaySelect .day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeTrainDay = chip.dataset.day; editingWeekKey = null; deleteConfirmWeekKey = null; renderTrain(); }));
+    return;
+  }
+
+  const dayChips = `<a href="#" id="changeWorkoutLink" style="display:inline-block;font-size:12px;color:var(--text-muted);margin-bottom:12px;text-decoration:none;">&larr; Change workout</a>`;
+  const day = program.days.find(d=>d.name===activeTrainDay);
+
+  if(!day.exercises.length){
+    container.innerHTML = `${dayChips}<div class="empty-state"><div class="big">No exercises in ${day.name}</div>Add some in the Build tab.</div>`;
+    document.getElementById('changeWorkoutLink').addEventListener('click', (e)=>{ e.preventDefault(); activeTrainDay = null; renderTrain(); });
+    return;
+  }
+
+  if(day.weeks.length === 0){
+    day.weeks.push({number:1, date:new Date().toISOString().slice(0,10), completed:false, exerciseSets:{}});
+    saveProgram();
+  }
+
+  const lastWeek = day.weeks[day.weeks.length-1];
+  const activeWeek = (!lastWeek.completed) ? lastWeek : null;
+  const completedWeeks = day.weeks.filter(w=>w.completed).sort((a,b)=>a.number-b.number);
+
+  const drawersHTML = completedWeeks.map(w=>{
+    const key = day.name + '_' + w.number;
+    const isOpen = openDrawers.has(key);
+    const isEditing = editingWeekKey === key;
+    const isConfirmingDelete = deleteConfirmWeekKey === key;
+
+    let bodyHTML;
+    if(isEditing){
+      const editRows = day.exercises.map(ex=>{
+        const sets = w.exerciseSets[ex.id] || [];
+        const rows = Array.from({length: ex.sets}).map((_,i)=>{
+          const s = sets[i] || {};
+          return `
+          <div class="set-row">
+            <div class="set-label">${i+1}</div>
+            <input type="number" data-editex="${ex.id}" data-set="${i}" data-field="weight" value="${s.weight ?? ''}" placeholder="wt">
+            <input type="number" data-editex="${ex.id}" data-set="${i}" data-field="reps" value="${s.reps ?? ''}" placeholder="reps">
+            <input type="number" data-editex="${ex.id}" data-set="${i}" data-field="rpe" step="0.5" value="${s.rpe ?? ''}" placeholder="rpe">
+          </div>`;
+        }).join('');
+        return `<div style="margin-bottom:10px;"><div class="ex-name" style="margin-bottom:4px;">${ex.name}</div>${rows}</div>`;
+      }).join('');
+      bodyHTML = editRows + `<div class="btn-row"><button class="btn small" data-save-edit="${key}">Save Changes</button><button class="btn secondary small" data-cancel-edit="${key}">Cancel</button></div>`;
+    } else if(isConfirmingDelete){
+      bodyHTML = `<p class="hint">Delete Week ${w.number}? This can't be undone.</p><div class="btn-row"><button class="btn ghost-confirm small" data-confirm-delete="${key}">Yes, delete</button><button class="btn secondary small" data-cancel-delete="${key}">Cancel</button></div>`;
+    } else {
+      const rows = day.exercises.map(ex=>{
+        const sets = w.exerciseSets[ex.id];
+        if(!sets || !sets.length) return '';
+        return `<div class="week-summary-row"><div class="wn">${ex.name}</div><div class="wv">${sets.map(s=>s.weight+'×'+s.reps+(s.rpe?', RPE '+s.rpe:'')).join('   ')}</div></div>`;
+      }).join('') || '<p class="hint">No sets logged.</p>';
+      bodyHTML = rows + `<div class="btn-row"><button class="btn secondary small" data-edit-week="${key}">Edit</button><button class="btn secondary small danger" data-delete-week="${key}">Delete</button></div>`;
+    }
+
+    return `
+      <div class="week-drawer">
+        <div class="week-drawer-header ${isOpen?'open':''}" data-toggle-drawer="${key}">Week ${w.number} — ${w.date}<span class="chevron">▾</span></div>
+        <div class="week-drawer-body ${isOpen?'open':''}">${bodyHTML}</div>
+      </div>`;
+  }).join('');
+
+  let activeSectionHTML = '';
+  let footerButtonHTML = '';
+
+  if(activeWeek){
+    const exercisesHTML = day.exercises.map(ex=>{
+      const reco = getRecommendation(day, ex, activeWeek.number);
+      const ghostClass = 'ghost-' + reco.type;
+      const draft = activeWeek.exerciseSets[ex.id];
+      const setRows = Array.from({length: ex.sets}).map((_,i)=>{
+        const target = getSetTarget(ex, i);
+        const prevSet = reco.prev ? (reco.prev.sets[i] || {}) : null;
+        let suggestedWeight = '';
+        if(prevSet && prevSet.weight !== undefined){
+          if(reco.type === 'increase') suggestedWeight = prevSet.weight + reco.increment;
+          else if(reco.type === 'decrease') suggestedWeight = Math.max(0, prevSet.weight - reco.increment);
+          else suggestedWeight = prevSet.weight;
+        }
+        const repsPlaceholder = prevSet ? (prevSet.reps ?? 'reps') : `${target.repMin}-${target.repMax}`;
+        const weightPlaceholder = prevSet ? (suggestedWeight !== '' ? suggestedWeight : 'wt') : (ex.weight || 'wt');
+        const rpePlaceholder = prevSet ? (prevSet.rpe ?? 'rpe') : ex.idealRpe;
+
+        const rawDraft = (draft && draft[i]) ? draft[i] : null;
+        const d = (rawDraft && (rawDraft.reps || rawDraft.weight || rawDraft.rpe)) ? rawDraft : null;
+        const repsValue = d ? (d.reps || '') : (prevSet ? (prevSet.reps ?? '') : '');
+        const weightValue = d ? (d.weight || '') : (prevSet ? suggestedWeight : (ex.weight || ''));
+        const rpeValue = d ? (d.rpe || '') : (prevSet ? (prevSet.rpe ?? '') : '');
+
+        const ghostAttr = (!d && prevSet) ? `class="${ghostClass}"` : '';
+        const repsAttr = `${ghostAttr} value="${repsValue}" placeholder="${repsPlaceholder}"`;
+        const weightAttr = `${ghostAttr} value="${weightValue}" placeholder="${weightPlaceholder}"`;
+        const rpeAttr = `${ghostAttr} value="${rpeValue}" placeholder="${rpePlaceholder}"`;
+        return `
+        <div class="set-row">
+          <div class="set-label">${i+1}</div>
+          <input type="number" data-ex="${ex.id}" data-set="${i}" data-field="weight" inputmode="decimal" ${weightAttr}>
+          <input type="number" data-ex="${ex.id}" data-set="${i}" data-field="reps" inputmode="numeric" ${repsAttr}>
+          <input type="number" data-ex="${ex.id}" data-set="${i}" data-field="rpe" inputmode="decimal" step="0.5" min="1" max="10" ${rpeAttr}>
+        </div>
+        <div class="set-warning" id="warn-${ex.id}-${i}"></div>`;
+      }).join('');
+
+      const targetLabel = ex.type==='pyramid' ? ex.setTargets.map(t=>t.repMin+'-'+t.repMax).join(' / ') : `${ex.sets} × ${ex.repMin}-${ex.repMax}`;
+
+      return `
+        <div class="exercise-block card" data-exercise-id="${ex.id}">
+          <div class="exercise-head">
+            <div>
+              <div class="exercise-name">${ex.name}</div>
+              <div class="exercise-target">Target: ${targetLabel} &middot; ${restLabelFor(ex.movementType)}</div>
+            </div>
+            ${badgeHTML(reco)}
+          </div>
+          <div class="reco-text">${reco.detail}</div>
+          <div style="margin-top:12px;">
+            <div class="set-row"><div></div><div class="set-header-label">Weight</div><div class="set-header-label">Reps</div><div class="set-header-label">RPE</div></div>
+            ${setRows}
+          </div>
+        </div>`;
+    }).join('');
+
+    activeSectionHTML = `<h2 class="section-title">Week ${activeWeek.number} — in progress</h2>${exercisesHTML}`;
+    footerButtonHTML = `<button class="btn" id="saveWeekBtn">Save Week ${activeWeek.number}</button>`;
+  } else {
+    footerButtonHTML = `<button class="btn" id="startWeekBtn">Start Week ${lastWeek.number+1}</button>`;
+  }
+
+  container.innerHTML = `
+    ${dayChips}
+    ${drawersHTML}
+    ${activeSectionHTML}
+    <div class="btn-row">${footerButtonHTML}</div>
+  `;
+
+  document.getElementById('changeWorkoutLink').addEventListener('click', (e)=>{ e.preventDefault(); activeTrainDay = null; editingWeekKey = null; deleteConfirmWeekKey = null; renderTrain(); });
+  document.querySelectorAll('[data-toggle-drawer]').forEach(hdr=>{
+    hdr.addEventListener('click', ()=>{
+      const key = hdr.dataset.toggleDrawer;
+      if(openDrawers.has(key)) openDrawers.delete(key); else openDrawers.add(key);
+      renderTrain();
+    });
+  });
+  document.querySelectorAll('.set-row input').forEach(inp=>inp.addEventListener('focus', ()=> inp.select()));
+  document.querySelectorAll('.set-row input').forEach(inp=>inp.addEventListener('input', ()=>{ inp.classList.remove('ghost-increase','ghost-maintain','ghost-decrease'); }));
+
+  if(activeWeek){
+    document.querySelectorAll('[data-ex]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        const ex = day.exercises.find(e=>e.id===inp.dataset.ex);
+        autosaveExerciseDraft(day, activeWeek, ex);
+      });
+    });
+
+    day.exercises.forEach(ex=>{
+      for(let i=0;i<ex.sets;i++){
+        const repsInput = document.querySelector(`[data-ex="${ex.id}"][data-set="${i}"][data-field="reps"]`);
+        const rpeInput = document.querySelector(`[data-ex="${ex.id}"][data-set="${i}"][data-field="rpe"]`);
+        const warnDiv = document.getElementById(`warn-${ex.id}-${i}`);
+        if(!repsInput || !rpeInput || !warnDiv) continue;
+        const checkSet = ()=>{
+          const repsVal = parseFloat(repsInput.value) || 0;
+          const rpeVal = parseFloat(rpeInput.value) || 0;
+          const t = getSetTarget(ex, i);
+          if(repsVal > 0 && rpeVal > 0 && repsVal < t.repMin && rpeVal >= 9){
+            warnDiv.textContent = `⚠ High RPE (${rpeVal}) with reps below target — consider dropping more than the usual 10–20% on your next set.`;
+            warnDiv.classList.add('show');
+          } else {
+            warnDiv.textContent = '';
+            warnDiv.classList.remove('show');
+          }
+        };
+        repsInput.addEventListener('input', checkSet);
+        rpeInput.addEventListener('input', checkSet);
+        checkSet();
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-edit-week]').forEach(btn=>btn.addEventListener('click', ()=>{
+    editingWeekKey = btn.dataset.editWeek; deleteConfirmWeekKey = null; openDrawers.add(btn.dataset.editWeek); renderTrain();
+  }));
+  document.querySelectorAll('[data-cancel-edit]').forEach(btn=>btn.addEventListener('click', ()=>{ editingWeekKey = null; renderTrain(); }));
+  document.querySelectorAll('[data-delete-week]').forEach(btn=>btn.addEventListener('click', ()=>{
+    deleteConfirmWeekKey = btn.dataset.deleteWeek; editingWeekKey = null; openDrawers.add(btn.dataset.deleteWeek); renderTrain();
+  }));
+  document.querySelectorAll('[data-cancel-delete]').forEach(btn=>btn.addEventListener('click', ()=>{ deleteConfirmWeekKey = null; renderTrain(); }));
+  document.querySelectorAll('[data-confirm-delete]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const num = weekNumberFromKey(btn.dataset.confirmDelete);
+    day.weeks = day.weeks.filter(w=>w.number !== num);
+    day.weeks.sort((a,b)=>a.number-b.number).forEach((w,idx)=>{ w.number = idx+1; });
+    saveProgram();
+    deleteConfirmWeekKey = null;
+    showToast('Week deleted');
+    renderTrain();
+  }));
+  document.querySelectorAll('[data-save-edit]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const num = weekNumberFromKey(btn.dataset.saveEdit);
+    const w = day.weeks.find(x=>x.number===num);
+    day.exercises.forEach(ex=>{
+      const inputs = document.querySelectorAll(`[data-editex="${ex.id}"]`);
+      const setsData = {};
+      inputs.forEach(inp=>{ const idx=inp.dataset.set; if(!setsData[idx]) setsData[idx]={}; setsData[idx][inp.dataset.field]=parseFloat(inp.value)||0; });
+      const sets = Object.values(setsData).filter(s=>s.reps>0);
+      if(sets.length) w.exerciseSets[ex.id] = sets; else delete w.exerciseSets[ex.id];
+    });
+    saveProgram();
+    editingWeekKey = null;
+    showToast('Week ' + num + ' updated');
+    renderTrain();
+  }));
+
+  if(activeWeek){
+    document.getElementById('saveWeekBtn').addEventListener('click', ()=> saveActiveWeek(day, activeWeek));
+  } else {
+    document.getElementById('startWeekBtn').addEventListener('click', ()=>{
+      day.weeks.push({number: lastWeek.number+1, date:new Date().toISOString().slice(0,10), completed:false, exerciseSets:{}});
+      saveProgram();
+      renderTrain();
+    });
+  }
+}
+
+function saveActiveWeek(day, week){
+  let savedCount = 0;
+  day.exercises.forEach(ex=>{
+    const inputs = document.querySelectorAll(`[data-ex="${ex.id}"]`);
+    const setsData = {};
+    inputs.forEach(inp=>{
+      const setIdx = inp.dataset.set;
+      if(!setsData[setIdx]) setsData[setIdx] = {};
+      setsData[setIdx][inp.dataset.field] = parseFloat(inp.value) || 0;
+    });
+    const sets = Object.values(setsData).filter(s=> s.reps > 0);
+    if(sets.length){ week.exerciseSets[ex.id] = sets; savedCount++; }
+  });
+
+  if(savedCount === 0){ showToast('Log at least one set before saving'); return; }
+  week.completed = true;
+  week.date = new Date().toISOString().slice(0,10);
+  saveProgram();
+  showToast('Week ' + week.number + ' saved');
+  renderTrain();
+}
+
+// ---------- Progress tab ----------
+function renderProgress(){
+  const container = document.getElementById('progressContent');
+  const daysWithData = program.days.filter(d=>d.weeks.some(w=>w.completed));
+  if(!daysWithData.length){
+    container.innerHTML = '<div class="empty-state"><div class="big">Nothing logged yet</div>Log a week in the Train tab to start tracking progress.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <h2 class="section-title">Select workout</h2>
+    <select id="progressDaySelect">${daysWithData.map(d=>`<option value="${d.name}">${d.name}</option>`).join('')}</select>
+    <div style="margin-top:12px;">
+      <h2 class="section-title">Select exercise</h2>
+      <select id="progressExSelect"></select>
+    </div>
+    <div id="exerciseHistory" style="margin-top:16px;"></div>
+  `;
+  document.getElementById('progressDaySelect').addEventListener('change', populateProgressExercises);
+  populateProgressExercises();
+}
+
+function populateProgressExercises(){
+  const dayName = document.getElementById('progressDaySelect').value;
+  const day = program.days.find(d=>d.name===dayName);
+  const exSelect = document.getElementById('progressExSelect');
+  exSelect.innerHTML = day.exercises.map(ex=>`<option value="${ex.id}">${ex.name}</option>`).join('');
+  exSelect.onchange = ()=> renderExerciseHistory(day);
+  renderExerciseHistory(day);
+}
+
+function renderExerciseHistory(day){
+  const exId = document.getElementById('progressExSelect').value;
+  const exercise = day.exercises.find(e=>e.id===exId);
+  const history = day.weeks.filter(w=>w.completed && w.exerciseSets[exId]).sort((a,b)=>b.number-a.number);
+
+  const reco = getRecommendation(day, exercise);
+  const recoHTML = `<div class="card">${badgeHTML(reco)}<div class="reco-text">${reco.detail}</div></div>`;
+
+  const historyHTML = history.map(w=>`
+    <div class="history-item">
+      <div class="history-date">Week ${w.number} — ${w.date}</div>
+      <div class="history-sets">${w.exerciseSets[exId].map(s=> s.weight+'×'+s.reps+(s.rpe?', RPE '+s.rpe:'')).join('  |  ')}</div>
+    </div>
+  `).join('') || '<p class="hint">No completed weeks for this exercise yet.</p>';
+
+  document.getElementById('exerciseHistory').innerHTML = recoHTML + `<div class="card">${historyHTML}</div>`;
+}
+
+// ---------- Init ----------
+renderBuild();
+</script>
+</body>
+</html>

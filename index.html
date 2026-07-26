@@ -128,6 +128,11 @@
 
   .inline-form{display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);}
   .inline-form.open{display:block;}
+
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;align-items:center;justify-content:center;padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal-panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto;}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
 </style>
 </head>
 <body>
@@ -138,6 +143,17 @@
       <div class="wordmark">GAINS<span>VILLE</span></div>
       <div class="tagline">Build. Log. Adjust.</div>
     </div>
+    <button id="settingsBtn" aria-label="Settings" style="background:transparent;border:none;padding:0;cursor:pointer;width:44px;height:44px;display:flex;align-items:center;justify-content:center;">
+      <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="20" cy="20" r="18" fill="none" stroke="var(--purple)" stroke-width="2.5"/>
+        <circle cx="20" cy="20" r="12.5" fill="none" stroke="var(--purple)" stroke-width="1.5" opacity="0.5"/>
+        <circle cx="20" cy="20" r="5.5" fill="var(--bg)" stroke="var(--purple)" stroke-width="2.5"/>
+        <circle cx="20" cy="7.5" r="1.6" fill="var(--purple)" opacity="0.7"/>
+        <circle cx="20" cy="32.5" r="1.6" fill="var(--purple)" opacity="0.7"/>
+        <circle cx="7.5" cy="20" r="1.6" fill="var(--purple)" opacity="0.7"/>
+        <circle cx="32.5" cy="20" r="1.6" fill="var(--purple)" opacity="0.7"/>
+      </svg>
+    </button>
   </header>
 
   <nav class="tabs">
@@ -178,6 +194,16 @@
 
 </div>
 
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2 class="section-title" style="margin:0;">Settings</h2>
+      <button id="closeSettingsBtn" aria-label="Close" style="background:transparent;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+    <div class="card" id="backupSection"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <datalist id="exerciseLibrary"></datalist>
 
@@ -210,7 +236,176 @@ function autosaveExerciseDraft(day, week, ex){
   saveProgram();
 }
 
-function saveProgram(){ localStorage.setItem('gv_program', JSON.stringify(program)); }
+function saveProgram(){ localStorage.setItem('gv_program', JSON.stringify(program)); writeBackupFile(); }
+
+// ---------- Backup: IndexedDB handle storage ----------
+const BACKUP_DB = 'gainsville_db', BACKUP_STORE = 'handles';
+function idbGet(key){
+  return new Promise((resolve)=>{
+    const req = indexedDB.open(BACKUP_DB, 1);
+    req.onupgradeneeded = ()=> req.result.createObjectStore(BACKUP_STORE);
+    req.onsuccess = ()=>{
+      const tx = req.result.transaction(BACKUP_STORE, 'readonly');
+      const getReq = tx.objectStore(BACKUP_STORE).get(key);
+      getReq.onsuccess = ()=> resolve(getReq.result || null);
+      getReq.onerror = ()=> resolve(null);
+    };
+    req.onerror = ()=> resolve(null);
+  });
+}
+function idbSet(key, value){
+  return new Promise((resolve)=>{
+    const req = indexedDB.open(BACKUP_DB, 1);
+    req.onupgradeneeded = ()=> req.result.createObjectStore(BACKUP_STORE);
+    req.onsuccess = ()=>{
+      const tx = req.result.transaction(BACKUP_STORE, 'readwrite');
+      tx.objectStore(BACKUP_STORE).put(value, key);
+      tx.oncomplete = ()=> resolve(true);
+      tx.onerror = ()=> resolve(false);
+    };
+    req.onerror = ()=> resolve(false);
+  });
+}
+
+// ---------- Backup: state ----------
+let backupFileHandle = null;
+let backupStatus = 'none'; // none | connected | needs-permission | unsupported
+let pendingRestoreData = null;
+
+function backupPayload(){
+  return JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), program }, null, 2);
+}
+
+async function writeBackupFile(){
+  if(!backupFileHandle || backupStatus !== 'connected') return;
+  try{
+    const writable = await backupFileHandle.createWritable();
+    await writable.write(backupPayload());
+    await writable.close();
+  }catch(e){
+    backupStatus = 'needs-permission';
+    renderBackupSection();
+  }
+}
+
+async function connectBackupFile(){
+  try{
+    const handle = await window.showSaveFilePicker({
+      suggestedName: 'gainsville-backup.json',
+      types: [{ description:'JSON Backup', accept: {'application/json': ['.json']} }]
+    });
+    backupFileHandle = handle;
+    await idbSet('backupHandle', handle);
+    backupStatus = 'connected';
+    await writeBackupFile();
+    showToast('Auto-backup connected');
+    renderBackupSection();
+  }catch(e){ /* user cancelled the picker */ }
+}
+
+async function reconnectBackupPermission(){
+  if(!backupFileHandle) return;
+  const perm = await backupFileHandle.requestPermission({mode:'readwrite'});
+  backupStatus = perm === 'granted' ? 'connected' : 'needs-permission';
+  if(backupStatus === 'connected'){ await writeBackupFile(); showToast('Reconnected'); }
+  renderBackupSection();
+}
+
+async function initBackup(){
+  if(!('showSaveFilePicker' in window)){ backupStatus = 'unsupported'; renderBackupSection(); return; }
+  const stored = await idbGet('backupHandle');
+  if(stored){
+    backupFileHandle = stored;
+    const perm = await backupFileHandle.queryPermission({mode:'readwrite'});
+    backupStatus = perm === 'granted' ? 'connected' : 'needs-permission';
+  }
+  renderBackupSection();
+}
+
+function downloadBackupNow(){
+  const blob = new Blob([backupPayload()], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'gainsville-backup-' + new Date().toISOString().slice(0,10) + '.json'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('Backup downloaded');
+}
+
+function restoreFromFileInput(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const data = JSON.parse(e.target.result);
+      const restoredProgram = data.program || data;
+      if(!restoredProgram || !Array.isArray(restoredProgram.days)) throw new Error('bad format');
+      pendingRestoreData = restoredProgram;
+      renderBackupSection();
+    }catch(err){ showToast('Could not read that file — check the format'); }
+  };
+  reader.readAsText(file);
+}
+
+function confirmRestore(){
+  if(!pendingRestoreData) return;
+  program = pendingRestoreData;
+  program.days.forEach((d,idx)=>{ if(!d.weeks) d.weeks=[]; if(d.createdAt===undefined) d.createdAt=idx; });
+  pendingRestoreData = null;
+  saveProgram();
+  activeBuildDay = program.days[0] ? program.days[0].name : null;
+  renderBuild();
+  showToast('Backup restored');
+}
+
+function cancelRestore(){ pendingRestoreData = null; renderBackupSection(); }
+
+function renderBackupSection(){
+  const el = document.getElementById('backupSection');
+  if(!el) return;
+
+  if(pendingRestoreData){
+    el.innerHTML = `
+      <p class="hint">Restore this backup? This replaces everything currently in the app.</p>
+      <div class="btn-row">
+        <button class="btn ghost-confirm small" id="confirmRestoreBtn">Yes, restore</button>
+        <button class="btn secondary small" id="cancelRestoreBtn">Cancel</button>
+      </div>`;
+    document.getElementById('confirmRestoreBtn').addEventListener('click', confirmRestore);
+    document.getElementById('cancelRestoreBtn').addEventListener('click', cancelRestore);
+    return;
+  }
+
+  let statusLine = '', actionButtons = '';
+  if(backupStatus === 'unsupported'){
+    statusLine = `<span style="color:var(--text-muted);">Auto-backup-to-file isn't supported in this browser (works in Chrome/Edge). Use manual backup below.</span>`;
+  } else if(backupStatus === 'connected'){
+    statusLine = `<span style="color:var(--purple-soft);">✓ Auto-backup connected — saving every change automatically.</span>`;
+  } else if(backupStatus === 'needs-permission'){
+    statusLine = `<span style="color:var(--rose);">Auto-backup needs permission again (can happen after closing your browser).</span>`;
+    actionButtons += `<button class="btn small" id="reconnectBackupBtn">Reconnect</button>`;
+  } else {
+    statusLine = `<span style="color:var(--text-muted);">Auto-backup not connected. Point it at a Google Drive/Dropbox-synced folder for automatic cloud backup.</span>`;
+    actionButtons += `<button class="btn small" id="connectBackupBtn">Connect Backup File</button>`;
+  }
+
+  el.innerHTML = `
+    <h2 class="section-title" style="margin-bottom:6px;">Backup</h2>
+    <p class="hint">${statusLine}</p>
+    <div class="btn-row">
+      ${actionButtons}
+      <button class="btn secondary small" id="downloadBackupBtn">Download Backup Now</button>
+      <button class="btn secondary small" id="restoreBackupBtn">Restore from File</button>
+    </div>
+    <input type="file" id="restoreFileInput" accept=".json" style="display:none;">
+  `;
+
+  if(backupStatus==='none') document.getElementById('connectBackupBtn').addEventListener('click', connectBackupFile);
+  if(backupStatus==='needs-permission') document.getElementById('reconnectBackupBtn').addEventListener('click', reconnectBackupPermission);
+  document.getElementById('downloadBackupBtn').addEventListener('click', downloadBackupNow);
+  document.getElementById('restoreBackupBtn').addEventListener('click', ()=> document.getElementById('restoreFileInput').click());
+  document.getElementById('restoreFileInput').addEventListener('change', (e)=>{
+    if(e.target.files[0]) restoreFromFileInput(e.target.files[0]);
+  });
+}
 
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -320,6 +515,16 @@ function attachLoadDemoListener(){
   });
 }
 attachLoadDemoListener();
+
+document.getElementById('settingsBtn').addEventListener('click', ()=>{
+  document.getElementById('settingsModal').classList.add('open');
+});
+document.getElementById('closeSettingsBtn').addEventListener('click', ()=>{
+  document.getElementById('settingsModal').classList.remove('open');
+});
+document.getElementById('settingsModal').addEventListener('click', (e)=>{
+  if(e.target.id === 'settingsModal') document.getElementById('settingsModal').classList.remove('open');
+});
 
 document.addEventListener('focus', (e)=>{
   if(e.target.tagName === 'INPUT' && e.target.type === 'number') e.target.select();
@@ -896,6 +1101,7 @@ function renderExerciseHistory(day){
 
 // ---------- Init ----------
 renderBuild();
+initBackup();
 </script>
 </body>
 </html>

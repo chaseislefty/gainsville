@@ -64,6 +64,8 @@
   .day-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
   .day-chip{padding:9px 16px;background:transparent;border:1.5px solid var(--purple);border-radius:100px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.5px;cursor:pointer;color:var(--purple);}
   .day-chip.active{background:var(--purple);color:#0B0B0D;border-color:var(--purple);font-weight:600;}
+  .day-chip.add-chip{border-style:dashed;color:var(--text-muted);border-color:var(--text-muted);}
+  .day-chip.add-chip:hover{color:var(--purple);border-color:var(--purple);}
 
   .exercise-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);}
   .exercise-row:last-child{border-bottom:none;}
@@ -148,15 +150,15 @@
     <h2 class="section-title">Days</h2>
     <div class="day-tabs" id="buildDayTabs"></div>
 
-    <div class="card" id="addDayCard">
-      <p class="hint">Add a training day, then select exercises into it below. Weeks get logged in the Train tab — you don't need to duplicate days.</p>
+    <div class="inline-form" id="addDayForm" style="margin-bottom:16px;">
       <div class="field-row">
         <input type="text" id="newDayName" placeholder="e.g. Push A">
-        <button class="btn" id="addDayBtn">Add Day</button>
+        <button class="btn small" id="addDayBtn">Add</button>
       </div>
-      <div id="demoDataRow" style="margin-top:10px;">
-        <button class="btn secondary small" id="loadDemoBtn">Load Demo Data</button>
-      </div>
+    </div>
+
+    <div id="demoDataRow" style="margin-bottom:16px;">
+      <a href="#" id="loadDemoLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Load demo data</a>
     </div>
 
     <div id="dayBuilderContent"></div>
@@ -182,13 +184,15 @@
 <script>
 // ---------- State ----------
 let program = JSON.parse(localStorage.getItem('gv_program') || '{"days":[]}');
-program.days.forEach(d=>{ if(!d.weeks) d.weeks = []; d.exercises.forEach(ex=>{ delete ex.lineageId; }); });
+program.days.forEach((d,idx)=>{ if(!d.weeks) d.weeks = []; if(d.createdAt===undefined) d.createdAt = idx; d.exercises.forEach(ex=>{ delete ex.lineageId; }); });
+function orderedDays(){ return [...program.days].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)); }
 let activeBuildDay = program.days[0] ? program.days[0].name : null;
 let activeTrainDay = null;
 let removeConfirmDay = null;
 let pyramidTargetsTemp = [];
 let demoConfirmPending = false;
 let openDrawers = new Set();
+let openExerciseDrawers = new Set();
 let editingWeekKey = null;
 let deleteConfirmWeekKey = null;
 
@@ -218,7 +222,8 @@ function showToast(msg){
 function updateExerciseLibrary(){
   const names = new Set();
   program.days.forEach(d=>d.exercises.forEach(e=>names.add(e.name)));
-  document.getElementById('exerciseLibrary').innerHTML = [...names].map(n=>`<option value="${n}">`).join('');
+  const sorted = [...names].sort((a,b)=>a.localeCompare(b));
+  document.getElementById('exerciseLibrary').innerHTML = sorted.map(n=>`<option value="${n}">`).join('');
 }
 
 // ---------- Tabs ----------
@@ -240,12 +245,16 @@ document.getElementById('addDayBtn').addEventListener('click', ()=>{
   const name = nameInput.value.trim();
   if(!name){ showToast('Name the day first'); return; }
   if(program.days.find(d=>d.name===name)){ showToast('That day already exists'); return; }
-  program.days.push({name, exercises:[], weeks:[]});
+  program.days.push({name, exercises:[], weeks:[], createdAt: Date.now()});
   saveProgram();
   nameInput.value = '';
+  document.getElementById('addDayForm').classList.remove('open');
   activeBuildDay = name;
   renderBuild();
   showToast('Day added: ' + name);
+});
+document.getElementById('newDayName').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') document.getElementById('addDayBtn').click();
 });
 
 function makeId(prefix){ return prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
@@ -254,6 +263,7 @@ function loadDemoData(){
   const benchId = makeId('ex'), ohpId = makeId('ex'), pullupId = makeId('ex'), inclineId = makeId('ex');
   const pushA = {
     name: 'Push A',
+    createdAt: 1,
     exercises: [
       { id: benchId, name:'Bench Press', sets:3, type:'straight', repMin:6, repMax:9, weight:185, unit:'lbs', idealRpe:8 },
       { id: ohpId, name:'Overhead Press', sets:3, type:'pyramid', setTargets:[{repMin:6,repMax:9},{repMin:8,repMax:10},{repMin:10,repMax:12}], repMin:6, repMax:12, weight:95, unit:'lbs', idealRpe:8 },
@@ -270,6 +280,7 @@ function loadDemoData(){
   };
   const pushB = {
     name: 'Push B',
+    createdAt: 2,
     exercises: [
       { id: inclineId, name:'Incline Bench', sets:3, type:'straight', repMin:8, repMax:12, weight:135, unit:'lbs', idealRpe:8 }
     ],
@@ -287,9 +298,10 @@ function loadDemoData(){
 }
 
 function attachLoadDemoListener(){
-  const btn = document.getElementById('loadDemoBtn');
-  if(!btn) return;
-  btn.addEventListener('click', ()=>{
+  const link = document.getElementById('loadDemoLink');
+  if(!link) return;
+  link.addEventListener('click', (e)=>{
+    e.preventDefault();
     const row = document.getElementById('demoDataRow');
     row.innerHTML = `<span style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:8px;">This replaces your current program and history. Continue?</span>
       <div class="btn-row" style="margin-top:0;">
@@ -298,16 +310,20 @@ function attachLoadDemoListener(){
       </div>`;
     document.getElementById('confirmDemoBtn').addEventListener('click', ()=>{
       loadDemoData();
-      row.innerHTML = '<button class="btn secondary small" id="loadDemoBtn">Load Demo Data</button>';
+      row.innerHTML = '<a href="#" id="loadDemoLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Load demo data</a>';
       attachLoadDemoListener();
     });
     document.getElementById('cancelDemoBtn').addEventListener('click', ()=>{
-      row.innerHTML = '<button class="btn secondary small" id="loadDemoBtn">Load Demo Data</button>';
+      row.innerHTML = '<a href="#" id="loadDemoLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Load demo data</a>';
       attachLoadDemoListener();
     });
   });
 }
 attachLoadDemoListener();
+
+document.addEventListener('focus', (e)=>{
+  if(e.target.tagName === 'INPUT' && e.target.type === 'number') e.target.select();
+}, true);
 
 function renderPyramidRows(setsCount){
   while(pyramidTargetsTemp.length < setsCount) pyramidTargetsTemp.push({repMin: 8, repMax: 12});
@@ -337,14 +353,22 @@ function renderBuild(){
   updateExerciseLibrary();
   const dayTabs = document.getElementById('buildDayTabs');
   if(!program.days.length){
-    dayTabs.innerHTML = '';
+    dayTabs.innerHTML = `<div class="day-chip add-chip" id="addWorkoutPill">+ Add Workout</div>`;
+    document.getElementById('addWorkoutPill').addEventListener('click', ()=>{
+      document.getElementById('addDayForm').classList.toggle('open');
+      document.getElementById('newDayName').focus();
+    });
     document.getElementById('dayBuilderContent').innerHTML = '';
     return;
   }
   if(!activeBuildDay || !program.days.find(d=>d.name===activeBuildDay)) activeBuildDay = program.days[0].name;
 
-  dayTabs.innerHTML = program.days.map(d=>`<div class="day-chip ${d.name===activeBuildDay?'active':''}" data-day="${d.name}">${d.name}</div>`).join('');
-  dayTabs.querySelectorAll('.day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeBuildDay = chip.dataset.day; renderBuild(); }));
+  dayTabs.innerHTML = orderedDays().map(d=>`<div class="day-chip ${d.name===activeBuildDay?'active':''}" data-day="${d.name}">${d.name}</div>`).join('') + `<div class="day-chip add-chip" id="addWorkoutPill">+ Add Workout</div>`;
+  dayTabs.querySelectorAll('.day-chip[data-day]').forEach(chip=>chip.addEventListener('click', ()=>{ activeBuildDay = chip.dataset.day; renderBuild(); }));
+  document.getElementById('addWorkoutPill').addEventListener('click', ()=>{
+    document.getElementById('addDayForm').classList.toggle('open');
+    document.getElementById('newDayName').focus();
+  });
 
   const day = program.days.find(d=>d.name===activeBuildDay);
   const exerciseRows = day.exercises.map(ex=>{
@@ -565,9 +589,9 @@ function renderTrain(){
   if(!activeTrainDay){
     container.innerHTML = `
       <h2 class="section-title">Which workout are you doing?</h2>
-      <div class="day-tabs" id="trainDaySelect">${program.days.map(d=>`<div class="day-chip" data-day="${d.name}">${d.name}</div>`).join('')}</div>
+      <div class="day-tabs" id="trainDaySelect">${orderedDays().map(d=>`<div class="day-chip" data-day="${d.name}">${d.name}</div>`).join('')}</div>
     `;
-    document.querySelectorAll('#trainDaySelect .day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeTrainDay = chip.dataset.day; editingWeekKey = null; deleteConfirmWeekKey = null; renderTrain(); }));
+    document.querySelectorAll('#trainDaySelect .day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeTrainDay = chip.dataset.day; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseDrawers = new Set(); renderTrain(); }));
     return;
   }
 
@@ -634,10 +658,12 @@ function renderTrain(){
   let footerButtonHTML = '';
 
   if(activeWeek){
+    if(openExerciseDrawers.size === 0 && day.exercises.length) openExerciseDrawers.add(day.exercises[0].id);
     const exercisesHTML = day.exercises.map(ex=>{
       const reco = getRecommendation(day, ex, activeWeek.number);
       const ghostClass = 'ghost-' + reco.type;
       const draft = activeWeek.exerciseSets[ex.id];
+      const isOpen = openExerciseDrawers.has(ex.id);
       const setRows = Array.from({length: ex.sets}).map((_,i)=>{
         const target = getSetTarget(ex, i);
         const prevSet = reco.prev ? (reco.prev.sets[i] || {}) : null;
@@ -674,18 +700,18 @@ function renderTrain(){
       const targetLabel = ex.type==='pyramid' ? ex.setTargets.map(t=>t.repMin+'-'+t.repMax).join(' / ') : `${ex.sets} × ${ex.repMin}-${ex.repMax}`;
 
       return `
-        <div class="exercise-block card" data-exercise-id="${ex.id}">
-          <div class="exercise-head">
-            <div>
-              <div class="exercise-name">${ex.name}</div>
-              <div class="exercise-target">Target: ${targetLabel} &middot; ${restLabelFor(ex.movementType)}</div>
-            </div>
-            ${badgeHTML(reco)}
+        <div class="week-drawer" data-exercise-id="${ex.id}">
+          <div class="week-drawer-header ${isOpen?'open':''}" data-toggle-exercise="${ex.id}">
+            <span>${ex.name}</span>
+            <div style="display:flex;align-items:center;gap:8px;">${badgeHTML(reco)}<span class="chevron">▾</span></div>
           </div>
-          <div class="reco-text">${reco.detail}</div>
-          <div style="margin-top:12px;">
-            <div class="set-row"><div></div><div class="set-header-label">Weight</div><div class="set-header-label">Reps</div><div class="set-header-label">RPE</div></div>
-            ${setRows}
+          <div class="week-drawer-body ${isOpen?'open':''}">
+            <div class="exercise-target" style="margin-bottom:6px;">Target: ${targetLabel} &middot; ${restLabelFor(ex.movementType)}</div>
+            <div class="reco-text">${reco.detail}</div>
+            <div style="margin-top:12px;">
+              <div class="set-row"><div></div><div class="set-header-label">Weight</div><div class="set-header-label">Reps</div><div class="set-header-label">RPE</div></div>
+              ${setRows}
+            </div>
           </div>
         </div>`;
     }).join('');
@@ -703,11 +729,18 @@ function renderTrain(){
     <div class="btn-row">${footerButtonHTML}</div>
   `;
 
-  document.getElementById('changeWorkoutLink').addEventListener('click', (e)=>{ e.preventDefault(); activeTrainDay = null; editingWeekKey = null; deleteConfirmWeekKey = null; renderTrain(); });
+  document.getElementById('changeWorkoutLink').addEventListener('click', (e)=>{ e.preventDefault(); activeTrainDay = null; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseDrawers = new Set(); renderTrain(); });
   document.querySelectorAll('[data-toggle-drawer]').forEach(hdr=>{
     hdr.addEventListener('click', ()=>{
       const key = hdr.dataset.toggleDrawer;
       if(openDrawers.has(key)) openDrawers.delete(key); else openDrawers.add(key);
+      renderTrain();
+    });
+  });
+  document.querySelectorAll('[data-toggle-exercise]').forEach(hdr=>{
+    hdr.addEventListener('click', ()=>{
+      const id = hdr.dataset.toggleExercise;
+      if(openExerciseDrawers.has(id)) openExerciseDrawers.delete(id); else openExerciseDrawers.add(id);
       renderTrain();
     });
   });
@@ -816,7 +849,7 @@ function saveActiveWeek(day, week){
 // ---------- Progress tab ----------
 function renderProgress(){
   const container = document.getElementById('progressContent');
-  const daysWithData = program.days.filter(d=>d.weeks.some(w=>w.completed));
+  const daysWithData = orderedDays().filter(d=>d.weeks.some(w=>w.completed));
   if(!daysWithData.length){
     container.innerHTML = '<div class="empty-state"><div class="big">Nothing logged yet</div>Log a week in the Train tab to start tracking progress.</div>';
     return;

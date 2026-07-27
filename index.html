@@ -173,8 +173,22 @@
       </div>
     </div>
 
-    <div id="demoDataRow" style="margin-bottom:16px;">
+    <div id="demoDataRow" style="margin-bottom:8px;">
       <a href="#" id="loadDemoLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Load demo data</a>
+      &nbsp;&middot;&nbsp;
+      <a href="#" id="importCsvLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Import from CSV</a>
+    </div>
+
+    <div class="inline-form" id="importPanel" style="margin-bottom:16px;">
+      <p class="hint">Upload or paste your CSV (Day, Exercise, SetsReps, Unit, StartWeight, MovementType, IdealRPE, Week1, Week2...).</p>
+      <input type="file" id="importCsvFile" accept=".csv">
+      <div style="margin:10px 0 6px;font-size:12px;color:var(--text-muted);">— or paste below —</div>
+      <textarea id="importCsvPaste" style="width:100%;min-height:100px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
+      <div class="btn-row">
+        <button class="btn small" id="runImportBtn">Import</button>
+        <button class="btn secondary small" id="cancelImportBtn">Cancel</button>
+      </div>
+      <div id="importResults" style="margin-top:10px;"></div>
     </div>
 
     <div id="dayBuilderContent"></div>
@@ -515,6 +529,178 @@ function attachLoadDemoListener(){
   });
 }
 attachLoadDemoListener();
+
+// ---------- CSV Import ----------
+function parseCSVLine(line){
+  const result = [];
+  let cur = '', inQuotes = false;
+  for(let i=0;i<line.length;i++){
+    const c = line[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(line[i+1] === '"'){ cur += '"'; i++; } else { inQuotes = false; }
+      } else cur += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ result.push(cur); cur = ''; }
+      else cur += c;
+    }
+  }
+  result.push(cur);
+  return result.map(s=>s.trim());
+}
+
+function parseImportCSV(text){
+  const lines = text.trim().split(/\r?\n/).filter(l=>l.trim().length);
+  if(lines.length < 2) throw new Error('Need a header row plus at least one data row.');
+  const headers = parseCSVLine(lines[0]).map(h=>h.trim());
+  const lowerHeaders = headers.map(h=>h.toLowerCase());
+  const idx = (name)=> lowerHeaders.indexOf(name.toLowerCase());
+  const dayIdx = idx('day'), exIdx = idx('exercise'), srIdx = idx('setsreps'), unitIdx = idx('unit'), swIdx = idx('startweight'), mtIdx = idx('movementtype'), rpeIdx = idx('idealrpe');
+  if([dayIdx,exIdx,srIdx,unitIdx,swIdx].some(i=>i===-1)) throw new Error('Missing one of the required columns: Day, Exercise, SetsReps, Unit, StartWeight');
+  const weekCols = [];
+  headers.forEach((h,i)=>{ const m = h.match(/^week(\d+)$/i); if(m) weekCols.push({index:i, week: parseInt(m[1])}); });
+
+  const warnings = [];
+  const dayMap = {};
+
+  lines.slice(1).forEach((line, rowNum)=>{
+    const cells = parseCSVLine(line);
+    const dayName = cells[dayIdx], exName = cells[exIdx];
+    if(!dayName || !exName) return;
+    if(!dayMap[dayName]) dayMap[dayName] = { name: dayName, exercises: [], weeksData: {} };
+
+    const setsRepsRaw = (cells[srIdx]||'').trim();
+    let type='straight', sets=3, repMin=8, repMax=12, setTargets=null;
+    const straightMatch = setsRepsRaw.match(/^(\d+)\s*x\s*(\d+)\s*-\s*(\d+)$/i);
+    if(straightMatch){
+      sets = parseInt(straightMatch[1]); repMin = parseInt(straightMatch[2]); repMax = parseInt(straightMatch[3]);
+    } else {
+      const tokens = setsRepsRaw.split(';').map(t=>t.trim()).filter(Boolean);
+      const targets = [];
+      tokens.forEach(t=>{
+        const m = t.match(/^(\d+)\s*-\s*(\d+)$/);
+        if(m) targets.push({repMin:parseInt(m[1]), repMax:parseInt(m[2])});
+        else warnings.push(`Row ${rowNum+2} (${exName}): couldn't read rep range "${t}", skipped it`);
+      });
+      if(targets.length){
+        type='pyramid'; sets=targets.length; setTargets=targets; repMin=targets[0].repMin; repMax=targets[targets.length-1].repMax;
+      } else {
+        warnings.push(`Row ${rowNum+2} (${exName}): couldn't read SetsReps "${setsRepsRaw}", defaulted to 3x8-12`);
+      }
+    }
+
+    const unit = (cells[unitIdx]||'lbs').trim().toLowerCase();
+    const startWeight = parseFloat(cells[swIdx]) || 0;
+    const movementType = (mtIdx>-1 && cells[mtIdx]) ? cells[mtIdx].trim().toLowerCase() : 'compound';
+    const idealRpe = (rpeIdx>-1 && parseFloat(cells[rpeIdx])) || 8;
+
+    const exId = 'ex_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    const exObj = { id: exId, name: exName, sets, type, repMin, repMax, unit, weight: startWeight, movementType, idealRpe };
+    if(setTargets) exObj.setTargets = setTargets;
+    dayMap[dayName].exercises.push(exObj);
+
+    weekCols.forEach(wc=>{
+      const raw = cells[wc.index];
+      if(!raw || !raw.trim()) return;
+      const setTokens = raw.split(';').map(t=>t.trim()).filter(Boolean);
+      const parsedSets = [];
+      setTokens.forEach(tok=>{
+        const m = tok.match(/^([\d.]+)\s*x\s*([\d.]+)(?:\s*x\s*([\d.]+))?$/i);
+        if(m){
+          const s = { weight: parseFloat(m[1]), reps: parseFloat(m[2]) };
+          if(m[3]) s.rpe = parseFloat(m[3]);
+          parsedSets.push(s);
+        } else {
+          warnings.push(`Row ${rowNum+2} (${exName}), Week${wc.week}: couldn't read "${tok}", skipped it`);
+        }
+      });
+      if(parsedSets.length){
+        if(!dayMap[dayName].weeksData[wc.week]) dayMap[dayName].weeksData[wc.week] = {};
+        dayMap[dayName].weeksData[wc.week][exId] = parsedSets;
+      }
+    });
+  });
+
+  return { dayMap, warnings };
+}
+
+function applyImportedData(dayMap){
+  let dayCount = 0, exCount = 0, weekCount = 0;
+  Object.values(dayMap).forEach(parsedDay=>{
+    let day = program.days.find(d=>d.name===parsedDay.name);
+    if(!day){
+      day = { name: parsedDay.name, exercises: [], weeks: [], createdAt: Date.now() + Math.random() };
+      program.days.push(day);
+      dayCount++;
+    }
+    const idRemap = {};
+    parsedDay.exercises.forEach(ex=>{
+      const existing = day.exercises.find(e=>e.name===ex.name);
+      if(existing){
+        idRemap[ex.id] = existing.id;
+      } else {
+        day.exercises.push(ex);
+        exCount++;
+      }
+    });
+
+    const completedMax = day.weeks.filter(w=>w.completed).reduce((m,w)=>Math.max(m,w.number),0);
+    Object.keys(parsedDay.weeksData).map(Number).sort((a,b)=>a-b).forEach(wn=>{
+      const newNumber = wn + completedMax;
+      let week = { number: newNumber, date: 'imported', completed: true, exerciseSets: {} };
+      day.weeks.push(week);
+      weekCount++;
+      Object.entries(parsedDay.weeksData[wn]).forEach(([exId, sets])=>{
+        const finalId = idRemap[exId] || exId;
+        week.exerciseSets[finalId] = sets;
+      });
+    });
+
+    day.weeks.sort((a,b)=>{
+      if(a.completed !== b.completed) return a.completed ? -1 : 1;
+      return a.number - b.number;
+    });
+    day.weeks.forEach((w,i)=>{ w.number = i+1; });
+  });
+  saveProgram();
+  return { dayCount, exCount, weekCount };
+}
+
+document.getElementById('importCsvLink').addEventListener('click', (e)=>{
+  e.preventDefault();
+  document.getElementById('importPanel').classList.toggle('open');
+});
+document.getElementById('cancelImportBtn').addEventListener('click', ()=>{
+  document.getElementById('importPanel').classList.remove('open');
+  document.getElementById('importResults').innerHTML = '';
+});
+document.getElementById('importCsvFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt)=>{ document.getElementById('importCsvPaste').value = evt.target.result; };
+  reader.readAsText(file);
+});
+document.getElementById('runImportBtn').addEventListener('click', ()=>{
+  const text = document.getElementById('importCsvPaste').value;
+  const resultsEl = document.getElementById('importResults');
+  if(!text.trim()){ showToast('Paste or upload a CSV first'); return; }
+  try{
+    const { dayMap, warnings } = parseImportCSV(text);
+    const { dayCount, exCount, weekCount } = applyImportedData(dayMap);
+    let html = `<p class="hint" style="color:var(--purple-soft);">Imported ${exCount} exercise(s) across ${dayCount} new day(s), plus ${weekCount} historical week(s).</p>`;
+    if(warnings.length){
+      html += `<p class="hint" style="color:var(--rose);margin-bottom:4px;">${warnings.length} cell(s) skipped:</p><p class="hint" style="font-family:'JetBrains Mono',monospace;font-size:11px;">${warnings.join('<br>')}</p>`;
+    }
+    resultsEl.innerHTML = html;
+    activeBuildDay = Object.keys(dayMap)[0] || activeBuildDay;
+    renderBuild();
+    showToast('Import complete');
+  }catch(err){
+    resultsEl.innerHTML = `<p class="hint" style="color:var(--rose);">${err.message}</p>`;
+  }
+});
 
 document.getElementById('settingsBtn').addEventListener('click', ()=>{
   document.getElementById('settingsModal').classList.add('open');

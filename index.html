@@ -180,13 +180,20 @@
     </div>
 
     <div class="inline-form" id="importPanel" style="margin-bottom:16px;">
-      <p class="hint">Upload a CSV to import it immediately (Day, Exercise, SetsReps, Unit, StartWeight, MovementType, IdealRPE, Week1, Week2...).</p>
-      <input type="file" id="importCsvFile" accept=".csv">
-      <div style="margin:14px 0 6px;font-size:12px;color:var(--text-muted);">— or paste CSV text directly —</div>
-      <textarea id="importCsvPaste" style="width:100%;min-height:100px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
+      <p class="hint">Upload a CSV to import it immediately.</p>
+      <input type="file" id="importCsvFile" accept=".csv" style="display:none;">
+      <button class="btn small" id="chooseFileBtn">Choose File</button>
+      <div style="margin-top:10px;">
+        <a href="#" id="togglePasteLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Paste CSV text instead</a>
+      </div>
+      <div id="pasteArea" style="display:none;margin-top:10px;">
+        <textarea id="importCsvPaste" style="width:100%;min-height:80px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
+        <div class="btn-row">
+          <button class="btn small" id="runImportBtn">Import Pasted Text</button>
+        </div>
+      </div>
       <div class="btn-row">
-        <button class="btn small" id="runImportBtn">Import Pasted Text</button>
-        <button class="btn secondary small" id="cancelImportBtn">Cancel</button>
+        <button class="btn secondary small" id="cancelImportBtn">Close</button>
       </div>
       <div id="importResults" style="margin-top:10px;"></div>
     </div>
@@ -229,7 +236,7 @@ function orderedDays(){ return [...program.days].sort((a,b)=>(a.createdAt||0)-(b
 let activeBuildDay = program.days[0] ? program.days[0].name : null;
 let activeTrainDay = null;
 let removeConfirmDay = null;
-let editingExerciseId = null;
+let bulkEditMode = false;
 let renamingDay = false;
 let pyramidTargetsTemp = [];
 let demoConfirmPending = false;
@@ -549,6 +556,32 @@ function parseCSVLine(line){
   return result.map(s=>s.trim());
 }
 
+function parseSetsReps(setsRepsRaw, warnFn){
+  setsRepsRaw = (setsRepsRaw||'').trim();
+  let type='straight', sets=3, repMin=8, repMax=12, setTargets=null;
+  const straightMatch = setsRepsRaw.match(/^(\d+)\s*x\s*(\d+)\s*-\s*(\d+)$/i);
+  const fixedMatch = setsRepsRaw.match(/^(\d+)\s*x\s*(\d+)$/i);
+  if(straightMatch){
+    sets = parseInt(straightMatch[1]); repMin = parseInt(straightMatch[2]); repMax = parseInt(straightMatch[3]);
+  } else if(fixedMatch){
+    sets = parseInt(fixedMatch[1]); repMin = parseInt(fixedMatch[2]); repMax = parseInt(fixedMatch[2]);
+  } else {
+    const tokens = setsRepsRaw.split(';').map(t=>t.trim()).filter(Boolean);
+    const targets = [];
+    tokens.forEach(t=>{
+      const m = t.match(/^(\d+)\s*-\s*(\d+)$/);
+      if(m) targets.push({repMin:parseInt(m[1]), repMax:parseInt(m[2])});
+      else if(warnFn) warnFn(`couldn't read rep range "${t}", skipped it`);
+    });
+    if(targets.length){
+      type='pyramid'; sets=targets.length; setTargets=targets; repMin=targets[0].repMin; repMax=targets[targets.length-1].repMax;
+    } else if(warnFn){
+      warnFn(`couldn't read SetsReps "${setsRepsRaw}", defaulted to 3x8-12`);
+    }
+  }
+  return { type, sets, repMin, repMax, setTargets };
+}
+
 function parseImportCSV(text){
   const lines = text.trim().split(/\r?\n/).filter(l=>l.trim().length);
   if(lines.length < 2) throw new Error('Need a header row plus at least one data row.');
@@ -569,28 +602,7 @@ function parseImportCSV(text){
     if(!dayName || !exName) return;
     if(!dayMap[dayName]) dayMap[dayName] = { name: dayName, exercises: [], weeksData: {} };
 
-    const setsRepsRaw = (cells[srIdx]||'').trim();
-    let type='straight', sets=3, repMin=8, repMax=12, setTargets=null;
-    const straightMatch = setsRepsRaw.match(/^(\d+)\s*x\s*(\d+)\s*-\s*(\d+)$/i);
-    const fixedMatch = setsRepsRaw.match(/^(\d+)\s*x\s*(\d+)$/i);
-    if(straightMatch){
-      sets = parseInt(straightMatch[1]); repMin = parseInt(straightMatch[2]); repMax = parseInt(straightMatch[3]);
-    } else if(fixedMatch){
-      sets = parseInt(fixedMatch[1]); repMin = parseInt(fixedMatch[2]); repMax = parseInt(fixedMatch[2]);
-    } else {
-      const tokens = setsRepsRaw.split(';').map(t=>t.trim()).filter(Boolean);
-      const targets = [];
-      tokens.forEach(t=>{
-        const m = t.match(/^(\d+)\s*-\s*(\d+)$/);
-        if(m) targets.push({repMin:parseInt(m[1]), repMax:parseInt(m[2])});
-        else warnings.push(`Row ${rowNum+2} (${exName}): couldn't read rep range "${t}", skipped it`);
-      });
-      if(targets.length){
-        type='pyramid'; sets=targets.length; setTargets=targets; repMin=targets[0].repMin; repMax=targets[targets.length-1].repMax;
-      } else {
-        warnings.push(`Row ${rowNum+2} (${exName}): couldn't read SetsReps "${setsRepsRaw}", defaulted to 3x8-12`);
-      }
-    }
+    const { type, sets, repMin, repMax, setTargets } = parseSetsReps(cells[srIdx], (msg)=> warnings.push(`Row ${rowNum+2} (${exName}): ${msg}`));
 
     const unit = (cells[unitIdx]||'lbs').trim().toLowerCase();
     const startWeight = parseFloat(cells[swIdx]) || 0;
@@ -676,6 +688,13 @@ document.getElementById('importCsvLink').addEventListener('click', (e)=>{
 document.getElementById('cancelImportBtn').addEventListener('click', ()=>{
   document.getElementById('importPanel').classList.remove('open');
   document.getElementById('importResults').innerHTML = '';
+});
+document.getElementById('chooseFileBtn').addEventListener('click', ()=>{
+  document.getElementById('importCsvFile').click();
+});
+document.getElementById('togglePasteLink').addEventListener('click', (e)=>{
+  e.preventDefault();
+  document.getElementById('pasteArea').style.display = document.getElementById('pasteArea').style.display === 'none' ? 'block' : 'none';
 });
 
 function runImportOnText(text){
@@ -763,29 +782,56 @@ function renderBuild(){
   }
   if(!activeBuildDay || !program.days.find(d=>d.name===activeBuildDay)) activeBuildDay = program.days[0].name;
 
-  dayTabs.innerHTML = orderedDays().map(d=>`<div class="day-chip ${d.name===activeBuildDay?'active':''}" data-day="${d.name}">${d.name}</div>`).join('') + `<div class="day-chip add-chip" id="addWorkoutPill">+ Add Workout</div>`;
-  dayTabs.querySelectorAll('.day-chip[data-day]').forEach(chip=>chip.addEventListener('click', ()=>{ activeBuildDay = chip.dataset.day; editingExerciseId = null; renamingDay = false; renderBuild(); }));
+  dayTabs.innerHTML = `<div class="day-chip add-chip" id="addWorkoutPill">+ Add Workout</div>` + orderedDays().map(d=>`<div class="day-chip ${d.name===activeBuildDay?'active':''}" data-day="${d.name}">${d.name}</div>`).join('');
+  dayTabs.querySelectorAll('.day-chip[data-day]').forEach(chip=>chip.addEventListener('click', ()=>{ activeBuildDay = chip.dataset.day; bulkEditMode = false; renamingDay = false; renderBuild(); }));
   document.getElementById('addWorkoutPill').addEventListener('click', ()=>{
     document.getElementById('addDayForm').classList.toggle('open');
     document.getElementById('newDayName').focus();
   });
 
   const day = program.days.find(d=>d.name===activeBuildDay);
-  const exerciseRows = day.exercises.map(ex=>{
-    const targetDesc = ex.type==='pyramid' ? ex.setTargets.map(t=>t.repMin+'-'+t.repMax).join(' / ') : `${ex.repMin}-${ex.repMax} × ${ex.sets}`;
-    const restLabel = restLabelFor(ex.movementType);
-    return `
-    <div class="exercise-row">
-      <div>
-        <div class="ex-name">${ex.name}</div>
-        <div class="ex-meta">${ex.sets} sets &middot; ${targetDesc} &middot; start ${ex.weight} ${ex.unit} &middot; RPE target ${ex.idealRpe} &middot; ${restLabel}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span data-edit-ex="${ex.id}" style="color:var(--text-muted);cursor:pointer;font-size:12px;text-decoration:underline;">Edit</span>
-        <div class="remove-x" data-remove-ex="${ex.id}">&times;</div>
-      </div>
-    </div>`;
-  }).join('') || '<p class="hint" style="margin:8px 0 0;">No exercises in this day yet.</p>';
+
+  const exerciseRows = bulkEditMode
+    ? day.exercises.map(ex=>{
+        const setsRepsStr = ex.type==='pyramid' ? ex.setTargets.map(t=>t.repMin+'-'+t.repMax).join(';') : `${ex.sets}x${ex.repMin}-${ex.repMax}`;
+        return `
+        <div class="bulk-edit-row" data-bulk-ex="${ex.id}" style="border-bottom:1px solid var(--line);padding:10px 0;">
+          <input type="text" data-field="name" value="${ex.name}" style="margin-bottom:8px;">
+          <div class="field-row cols-3">
+            <div><label class="field-label">Sets/Reps</label><input type="text" data-field="setsreps" value="${setsRepsStr}" placeholder="3x8-12 or 6-9;8-10"></div>
+            <div><label class="field-label">Weight</label><input type="number" data-field="weight" value="${ex.weight}"></div>
+            <div><label class="field-label">Unit</label>
+              <select data-field="unit">
+                <option value="lbs" ${ex.unit==='lbs'?'selected':''}>lbs</option>
+                <option value="kg" ${ex.unit==='kg'?'selected':''}>kg</option>
+                <option value="bw" ${ex.unit==='bw'?'selected':''}>bodyweight</option>
+                <option value="band" ${ex.unit==='band'?'selected':''}>assistance band</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-row" style="margin-top:8px;">
+            <div><label class="field-label">Movement</label>
+              <select data-field="movementType">
+                <option value="compound" ${ex.movementType!=='isolation'?'selected':''}>Compound</option>
+                <option value="isolation" ${ex.movementType==='isolation'?'selected':''}>Isolation</option>
+              </select>
+            </div>
+            <div><label class="field-label">Ideal RPE</label><input type="number" data-field="idealRpe" value="${ex.idealRpe}" step="0.5"></div>
+          </div>
+        </div>`;
+      }).join('') || '<p class="hint" style="margin:8px 0 0;">No exercises in this day yet.</p>'
+    : day.exercises.map(ex=>{
+        const targetDesc = ex.type==='pyramid' ? ex.setTargets.map(t=>t.repMin+'-'+t.repMax).join(' / ') : `${ex.repMin}-${ex.repMax} × ${ex.sets}`;
+        const restLabel = restLabelFor(ex.movementType);
+        return `
+        <div class="exercise-row">
+          <div>
+            <div class="ex-name">${ex.name}</div>
+            <div class="ex-meta">${ex.sets} sets &middot; ${targetDesc} &middot; start ${ex.weight} ${ex.unit} &middot; RPE target ${ex.idealRpe} &middot; ${restLabel}</div>
+          </div>
+          <div class="remove-x" data-remove-ex="${ex.id}">&times;</div>
+        </div>`;
+      }).join('') || '<p class="hint" style="margin:8px 0 0;">No exercises in this day yet.</p>';
 
   const dayTitleHTML = renamingDay
     ? `<div class="field-row" style="margin-bottom:6px;"><input type="text" id="renameDayInput" value="${day.name}"><button class="btn small" id="saveRenameBtn">Save</button></div>`
@@ -797,13 +843,17 @@ function renderBuild(){
        <button class="btn secondary small" id="cancelRemoveBtn">Cancel</button>`
     : `<button class="btn secondary small danger" id="removeDayBtn">Remove ${day.name}</button>`;
 
+  const bulkControlsHTML = bulkEditMode
+    ? `<button class="btn small" id="saveBulkEditBtn">Save All Changes</button><button class="btn secondary small" id="cancelBulkEditBtn">Cancel</button>`
+    : `<button class="btn small" id="toggleAddExBtn">+ Add Exercise</button><button class="btn secondary small" id="editAllBtn">Edit</button>`;
+
   document.getElementById('dayBuilderContent').innerHTML = `
     <div class="card">
       ${dayTitleHTML}
       ${exerciseRows}
       <div class="btn-row">
-        <button class="btn small" id="toggleAddExBtn">${editingExerciseId ? 'Cancel Edit' : '+ Add Exercise'}</button>
-        ${removeControlsHTML}
+        ${bulkControlsHTML}
+        ${bulkEditMode ? '' : removeControlsHTML}
       </div>
       <div class="inline-form" id="addExForm">
         <label class="field-label">Exercise name</label>
@@ -842,17 +892,49 @@ function renderBuild(){
           </div>
           <div></div>
         </div>
-        <div class="btn-row"><button class="btn" id="saveExBtn">${editingExerciseId ? 'Update Exercise' : 'Add to ' + day.name}</button></div>
+        <div class="btn-row"><button class="btn" id="saveExBtn">Add to ${day.name}</button></div>
       </div>
     </div>
   `;
 
-  document.getElementById('toggleAddExBtn').addEventListener('click', ()=>{
-    if(editingExerciseId){ editingExerciseId = null; renderBuild(); return; }
-    pyramidTargetsTemp = [];
-    document.getElementById('addExForm').classList.toggle('open');
-    refreshFormLayout();
-  });
+  if(bulkEditMode){
+    document.getElementById('saveBulkEditBtn').addEventListener('click', ()=>{
+      const warnings = [];
+      document.querySelectorAll('[data-bulk-ex]').forEach(row=>{
+        const exId = row.dataset.bulkEx;
+        const ex = day.exercises.find(e=>e.id===exId);
+        if(!ex) return;
+        ex.name = row.querySelector('[data-field="name"]').value.trim() || ex.name;
+        ex.weight = parseFloat(row.querySelector('[data-field="weight"]').value) || 0;
+        ex.unit = row.querySelector('[data-field="unit"]').value;
+        ex.movementType = row.querySelector('[data-field="movementType"]').value;
+        ex.idealRpe = parseFloat(row.querySelector('[data-field="idealRpe"]').value) || 8;
+        const parsed = parseSetsReps(row.querySelector('[data-field="setsreps"]').value, (msg)=> warnings.push(`${ex.name}: ${msg}`));
+        ex.type = parsed.type; ex.sets = parsed.sets; ex.repMin = parsed.repMin; ex.repMax = parsed.repMax;
+        if(parsed.setTargets) ex.setTargets = parsed.setTargets; else delete ex.setTargets;
+      });
+      saveProgram();
+      bulkEditMode = false;
+      renderBuild();
+      showToast(warnings.length ? `Saved with ${warnings.length} issue(s): ${warnings.join('; ')}` : 'All changes saved');
+    });
+    document.getElementById('cancelBulkEditBtn').addEventListener('click', ()=>{
+      bulkEditMode = false;
+      renderBuild();
+    });
+  } else {
+    document.getElementById('editAllBtn').addEventListener('click', ()=>{
+      bulkEditMode = true;
+      document.getElementById('addExForm').classList.remove('open');
+      renderBuild();
+    });
+    document.getElementById('toggleAddExBtn').addEventListener('click', ()=>{
+      pyramidTargetsTemp = [];
+      document.getElementById('addExForm').classList.toggle('open');
+      refreshFormLayout();
+    });
+  }
+
   document.getElementById('exType').addEventListener('change', refreshFormLayout);
   document.getElementById('exSets').addEventListener('input', refreshFormLayout);
 
@@ -875,28 +957,6 @@ function renderBuild(){
     });
   }
 
-  document.querySelectorAll('[data-edit-ex]').forEach(el=>{
-    el.addEventListener('click', ()=>{
-      editingExerciseId = el.dataset.editEx;
-      const ex = day.exercises.find(e=>e.id===editingExerciseId);
-      document.getElementById('addExForm').classList.add('open');
-      document.getElementById('exName').value = ex.name;
-      document.getElementById('exSets').value = ex.sets;
-      document.getElementById('exType').value = ex.type;
-      document.getElementById('exIdealRpe').value = ex.idealRpe;
-      document.getElementById('exWeight').value = ex.weight;
-      document.getElementById('exUnit').value = ex.unit;
-      document.getElementById('exMovementType').value = ex.movementType || 'compound';
-      if(ex.type === 'pyramid'){
-        pyramidTargetsTemp = ex.setTargets.map(t=>({...t}));
-      } else {
-        document.getElementById('exRepMin').value = ex.repMin;
-        document.getElementById('exRepMax').value = ex.repMax;
-      }
-      refreshFormLayout();
-    });
-  });
-
   if(removeConfirmDay === day.name){
     document.getElementById('confirmRemoveBtn').addEventListener('click', ()=>{
       program.days = program.days.filter(d=>d.name !== day.name);
@@ -910,48 +970,40 @@ function renderBuild(){
       removeConfirmDay = null;
       renderBuild();
     });
-  } else {
+  } else if(!bulkEditMode) {
     document.getElementById('removeDayBtn').addEventListener('click', ()=>{
       removeConfirmDay = day.name;
       renderBuild();
     });
   }
 
-  document.getElementById('saveExBtn').addEventListener('click', ()=>{
-    const name = document.getElementById('exName').value.trim();
-    if(!name){ showToast('Name the exercise first'); return; }
-    const sets = parseInt(document.getElementById('exSets').value) || 3;
-    const type = document.getElementById('exType').value;
-    const idealRpe = parseFloat(document.getElementById('exIdealRpe').value) || 8;
-    const movementType = document.getElementById('exMovementType').value;
-    const unit = document.getElementById('exUnit').value;
-    const weight = parseFloat(document.getElementById('exWeight').value) || 0;
+  if(!bulkEditMode){
+    document.getElementById('saveExBtn').addEventListener('click', ()=>{
+      const name = document.getElementById('exName').value.trim();
+      if(!name){ showToast('Name the exercise first'); return; }
+      const sets = parseInt(document.getElementById('exSets').value) || 3;
+      const type = document.getElementById('exType').value;
+      const idealRpe = parseFloat(document.getElementById('exIdealRpe').value) || 8;
+      const movementType = document.getElementById('exMovementType').value;
+      const unit = document.getElementById('exUnit').value;
+      const weight = parseFloat(document.getElementById('exWeight').value) || 0;
 
-    const base = { name, sets, unit, weight, idealRpe, type, movementType };
-    if(type==='pyramid'){
-      base.setTargets = pyramidTargetsTemp.slice(0, sets);
-      base.repMin = base.setTargets[0] ? base.setTargets[0].repMin : 8;
-      base.repMax = base.setTargets[base.setTargets.length-1] ? base.setTargets[base.setTargets.length-1].repMax : 12;
-    } else {
-      base.repMin = parseInt(document.getElementById('exRepMin').value) || 8;
-      base.repMax = parseInt(document.getElementById('exRepMax').value) || 12;
-    }
-
-    if(editingExerciseId){
-      const idx = day.exercises.findIndex(e=>e.id===editingExerciseId);
-      day.exercises[idx] = { ...base, id: editingExerciseId };
-      editingExerciseId = null;
-      saveProgram();
-      renderBuild();
-      showToast(name + ' updated');
-    } else {
+      const base = { name, sets, unit, weight, idealRpe, type, movementType };
+      if(type==='pyramid'){
+        base.setTargets = pyramidTargetsTemp.slice(0, sets);
+        base.repMin = base.setTargets[0] ? base.setTargets[0].repMin : 8;
+        base.repMax = base.setTargets[base.setTargets.length-1] ? base.setTargets[base.setTargets.length-1].repMax : 12;
+      } else {
+        base.repMin = parseInt(document.getElementById('exRepMin').value) || 8;
+        base.repMax = parseInt(document.getElementById('exRepMax').value) || 12;
+      }
       base.id = 'ex_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
       day.exercises.push(base);
       saveProgram();
       renderBuild();
       showToast(name + ' added');
-    }
-  });
+    });
+  }
 
   document.querySelectorAll('[data-remove-ex]').forEach(x=>{
     x.addEventListener('click', ()=>{
@@ -1224,7 +1276,6 @@ function renderTrain(){
       inp.addEventListener('input', ()=>{
         autosaveField(activeWeek, inp.dataset.ex, inp.dataset.set, inp.dataset.field, inp.value);
       });
-      inp.addEventListener('blur', ()=> renderTrain());
     });
 
     day.exercises.forEach(ex=>{
@@ -1239,6 +1290,15 @@ function renderTrain(){
           const t = getSetTarget(ex, i);
           if(repsVal > 0 && rpeVal > 0 && repsVal < t.repMin && rpeVal >= 9){
             warnDiv.textContent = `⚠ High RPE (${rpeVal}) with reps below target — consider dropping more than the usual 10–20% on your next set.`;
+            warnDiv.style.color = 'var(--rose)';
+            warnDiv.classList.add('show');
+          } else if(repsVal >= t.repMax && rpeVal > 0 && rpeVal <= 6){
+            warnDiv.textContent = `That was easy (RPE ${rpeVal}) — consider adding weight for your next set.`;
+            warnDiv.style.color = 'var(--purple-soft)';
+            warnDiv.classList.add('show');
+          } else if(repsVal >= t.repMin && rpeVal > 0 && rpeVal <= 8){
+            warnDiv.textContent = `Right on target — repeat this weight for your next set.`;
+            warnDiv.style.color = 'var(--text-muted)';
             warnDiv.classList.add('show');
           } else {
             warnDiv.textContent = '';

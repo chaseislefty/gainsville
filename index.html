@@ -62,10 +62,11 @@
   .btn-row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center;}
 
   .day-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
-  .day-chip{padding:9px 16px;background:transparent;border:1.5px solid var(--purple);border-radius:100px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.5px;cursor:pointer;color:var(--purple);}
+  .day-chip{padding:9px 16px;background:transparent;border:1.5px solid var(--purple);border-radius:100px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.5px;cursor:pointer;color:var(--purple);min-width:110px;text-align:center;white-space:nowrap;}
   .day-chip.active{background:var(--purple);color:#0B0B0D;border-color:var(--purple);font-weight:600;}
   .day-chip.add-chip{border-style:dashed;color:var(--text-muted);border-color:var(--text-muted);}
   .day-chip.add-chip:hover{color:var(--purple);border-color:var(--purple);}
+  select.pill-select{display:inline-block;width:auto;min-width:160px;padding:9px 16px;background:var(--purple);border:1.5px solid var(--purple);border-radius:100px;font-family:'Oswald',sans-serif;font-size:13px;font-weight:600;letter-spacing:.5px;color:#0B0B0D;cursor:pointer;}
 
   .exercise-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);}
   .exercise-row:last-child{border-bottom:none;}
@@ -80,7 +81,7 @@
 
   .set-row{display:grid;grid-template-columns:26px 1fr 1fr 1fr;gap:8px;align-items:center;margin-bottom:6px;}
   .set-label{font-family:'JetBrains Mono',monospace;color:var(--text-muted);font-size:12px;}
-  .set-row input{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:9px 6px;font-family:'JetBrains Mono',monospace;font-size:14px;width:100%;text-align:center;color:var(--text);transition:.15s;}
+  .set-row input{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:14px 8px;min-height:48px;box-sizing:border-box;font-family:'JetBrains Mono',monospace;font-size:16px;width:100%;text-align:center;color:var(--text);transition:.15s;}
   .set-row input::placeholder{color:var(--text-muted);opacity:.65;}
   .set-row input:focus{outline:none;border-color:var(--purple);}
   .set-row input.ghost-increase{color:var(--purple-soft);background:var(--purple-strong-bg);border-color:var(--purple);font-weight:600;}
@@ -173,29 +174,8 @@
       </div>
     </div>
 
-    <div id="demoDataRow" style="margin-bottom:8px;">
+    <div id="demoDataRow" style="margin-bottom:16px;">
       <a href="#" id="loadDemoLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Load demo data</a>
-      &nbsp;&middot;&nbsp;
-      <a href="#" id="importCsvLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Import from CSV</a>
-    </div>
-
-    <div class="inline-form" id="importPanel" style="margin-bottom:16px;">
-      <p class="hint">Upload a CSV to import it immediately.</p>
-      <input type="file" id="importCsvFile" accept=".csv" style="display:none;">
-      <button class="btn small" id="chooseFileBtn">Choose File</button>
-      <div style="margin-top:10px;">
-        <a href="#" id="togglePasteLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Paste CSV text instead</a>
-      </div>
-      <div id="pasteArea" style="display:none;margin-top:10px;">
-        <textarea id="importCsvPaste" style="width:100%;min-height:80px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
-        <div class="btn-row">
-          <button class="btn small" id="runImportBtn">Import Pasted Text</button>
-        </div>
-      </div>
-      <div class="btn-row">
-        <button class="btn secondary small" id="cancelImportBtn">Close</button>
-      </div>
-      <div id="importResults" style="margin-top:10px;"></div>
     </div>
 
     <div id="dayBuilderContent"></div>
@@ -222,6 +202,22 @@
       <button id="closeSettingsBtn" aria-label="Close" style="background:transparent;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">&times;</button>
     </div>
     <div class="card" id="backupSection"></div>
+    <div class="card">
+      <h2 class="section-title" style="margin-bottom:6px;">Import</h2>
+      <p class="hint">Upload a CSV to import a workout and its history.</p>
+      <input type="file" id="importCsvFile" accept=".csv" style="display:none;">
+      <button class="btn small" id="chooseFileBtn">Choose File</button>
+      <div style="margin-top:10px;">
+        <a href="#" id="togglePasteLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Paste CSV text instead</a>
+      </div>
+      <div id="pasteArea" style="display:none;margin-top:10px;">
+        <textarea id="importCsvPaste" style="width:100%;min-height:80px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
+        <div class="btn-row">
+          <button class="btn small" id="runImportBtn">Import Pasted Text</button>
+        </div>
+      </div>
+      <div id="importResults" style="margin-top:10px;"></div>
+    </div>
   </div>
 </div>
 
@@ -237,6 +233,7 @@ let activeBuildDay = program.days[0] ? program.days[0].name : null;
 let activeTrainDay = null;
 let removeConfirmDay = null;
 let bulkEditMode = false;
+let openBulkEditIds = new Set();
 let renamingDay = false;
 let pyramidTargetsTemp = [];
 let demoConfirmPending = false;
@@ -681,14 +678,6 @@ function applyImportedData(dayMap){
   return { dayCount, exCount, weekCount };
 }
 
-document.getElementById('importCsvLink').addEventListener('click', (e)=>{
-  e.preventDefault();
-  document.getElementById('importPanel').classList.toggle('open');
-});
-document.getElementById('cancelImportBtn').addEventListener('click', ()=>{
-  document.getElementById('importPanel').classList.remove('open');
-  document.getElementById('importResults').innerHTML = '';
-});
 document.getElementById('chooseFileBtn').addEventListener('click', ()=>{
   document.getElementById('importCsvFile').click();
 });
@@ -782,8 +771,14 @@ function renderBuild(){
   }
   if(!activeBuildDay || !program.days.find(d=>d.name===activeBuildDay)) activeBuildDay = program.days[0].name;
 
-  dayTabs.innerHTML = `<div class="day-chip add-chip" id="addWorkoutPill">+ Add Workout</div>` + orderedDays().map(d=>`<div class="day-chip ${d.name===activeBuildDay?'active':''}" data-day="${d.name}">${d.name}</div>`).join('');
-  dayTabs.querySelectorAll('.day-chip[data-day]').forEach(chip=>chip.addEventListener('click', ()=>{ activeBuildDay = chip.dataset.day; bulkEditMode = false; renamingDay = false; renderBuild(); }));
+  dayTabs.innerHTML = `
+    <div class="day-chip add-chip" id="addWorkoutPill">+ Add Workout</div>
+    <select id="workoutSelectPill" class="pill-select">
+      ${orderedDays().map(d=>`<option value="${d.name}" ${d.name===activeBuildDay?'selected':''}>${d.name}</option>`).join('')}
+    </select>`;
+  document.getElementById('workoutSelectPill').addEventListener('change', (e)=>{
+    activeBuildDay = e.target.value; bulkEditMode = false; renamingDay = false; renderBuild();
+  });
   document.getElementById('addWorkoutPill').addEventListener('click', ()=>{
     document.getElementById('addDayForm').classList.toggle('open');
     document.getElementById('newDayName').focus();
@@ -794,29 +789,38 @@ function renderBuild(){
   const exerciseRows = bulkEditMode
     ? day.exercises.map(ex=>{
         const setsRepsStr = ex.type==='pyramid' ? ex.setTargets.map(t=>t.repMin+'-'+t.repMax).join(';') : `${ex.sets}x${ex.repMin}-${ex.repMax}`;
+        const targetDesc = ex.type==='pyramid' ? ex.setTargets.map(t=>t.repMin+'-'+t.repMax).join(' / ') : `${ex.repMin}-${ex.repMax} × ${ex.sets}`;
+        const isOpen = openBulkEditIds.has(ex.id);
         return `
-        <div class="bulk-edit-row" data-bulk-ex="${ex.id}" style="border-bottom:1px solid var(--line);padding:10px 0;">
-          <input type="text" data-field="name" value="${ex.name}" style="margin-bottom:8px;">
-          <div class="field-row cols-3">
-            <div><label class="field-label">Sets/Reps</label><input type="text" data-field="setsreps" value="${setsRepsStr}" placeholder="3x8-12 or 6-9;8-10"></div>
-            <div><label class="field-label">Weight</label><input type="number" data-field="weight" value="${ex.weight}"></div>
-            <div><label class="field-label">Unit</label>
-              <select data-field="unit">
-                <option value="lbs" ${ex.unit==='lbs'?'selected':''}>lbs</option>
-                <option value="kg" ${ex.unit==='kg'?'selected':''}>kg</option>
-                <option value="bw" ${ex.unit==='bw'?'selected':''}>bodyweight</option>
-                <option value="band" ${ex.unit==='band'?'selected':''}>assistance band</option>
-              </select>
-            </div>
+        <div class="week-drawer" data-bulk-ex="${ex.id}">
+          <div class="week-drawer-header ${isOpen?'open':''}" data-toggle-bulk="${ex.id}">
+            <span>${ex.name}</span>
+            <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;text-transform:none;letter-spacing:0;">${targetDesc}</span><span class="chevron">▾</span></div>
           </div>
-          <div class="field-row" style="margin-top:8px;">
-            <div><label class="field-label">Movement</label>
-              <select data-field="movementType">
-                <option value="compound" ${ex.movementType!=='isolation'?'selected':''}>Compound</option>
-                <option value="isolation" ${ex.movementType==='isolation'?'selected':''}>Isolation</option>
-              </select>
+          <div class="week-drawer-body ${isOpen?'open':''}">
+            <label class="field-label">Name</label>
+            <input type="text" data-field="name" value="${ex.name}" style="margin-bottom:8px;">
+            <div class="field-row cols-3">
+              <div><label class="field-label">Sets/Reps</label><input type="text" data-field="setsreps" value="${setsRepsStr}" placeholder="3x8-12 or 6-9;8-10"></div>
+              <div><label class="field-label">Weight</label><input type="number" data-field="weight" value="${ex.weight}"></div>
+              <div><label class="field-label">Unit</label>
+                <select data-field="unit">
+                  <option value="lbs" ${ex.unit==='lbs'?'selected':''}>lbs</option>
+                  <option value="kg" ${ex.unit==='kg'?'selected':''}>kg</option>
+                  <option value="bw" ${ex.unit==='bw'?'selected':''}>bodyweight</option>
+                  <option value="band" ${ex.unit==='band'?'selected':''}>assistance band</option>
+                </select>
+              </div>
             </div>
-            <div><label class="field-label">Ideal RPE</label><input type="number" data-field="idealRpe" value="${ex.idealRpe}" step="0.5"></div>
+            <div class="field-row" style="margin-top:8px;">
+              <div><label class="field-label">Movement</label>
+                <select data-field="movementType">
+                  <option value="compound" ${ex.movementType!=='isolation'?'selected':''}>Compound</option>
+                  <option value="isolation" ${ex.movementType==='isolation'?'selected':''}>Isolation</option>
+                </select>
+              </div>
+              <div><label class="field-label">Ideal RPE</label><input type="number" data-field="idealRpe" value="${ex.idealRpe}" step="0.5"></div>
+            </div>
           </div>
         </div>`;
       }).join('') || '<p class="hint" style="margin:8px 0 0;">No exercises in this day yet.</p>'
@@ -845,7 +849,7 @@ function renderBuild(){
 
   const bulkControlsHTML = bulkEditMode
     ? `<button class="btn small" id="saveBulkEditBtn">Save All Changes</button><button class="btn secondary small" id="cancelBulkEditBtn">Cancel</button>`
-    : `<button class="btn small" id="toggleAddExBtn">+ Add Exercise</button><button class="btn secondary small" id="editAllBtn">Edit</button>`;
+    : `<button class="btn small" id="toggleAddExBtn">+ Add Exercise</button><button class="btn small" id="editAllBtn">Edit</button>`;
 
   document.getElementById('dayBuilderContent').innerHTML = `
     <div class="card">
@@ -898,6 +902,21 @@ function renderBuild(){
   `;
 
   if(bulkEditMode){
+    document.querySelectorAll('[data-toggle-bulk]').forEach(hdr=>{
+      hdr.addEventListener('click', ()=>{
+        const id = hdr.dataset.toggleBulk;
+        const body = hdr.nextElementSibling;
+        if(openBulkEditIds.has(id)){
+          openBulkEditIds.delete(id);
+          hdr.classList.remove('open');
+          body.classList.remove('open');
+        } else {
+          openBulkEditIds.add(id);
+          hdr.classList.add('open');
+          body.classList.add('open');
+        }
+      });
+    });
     document.getElementById('saveBulkEditBtn').addEventListener('click', ()=>{
       const warnings = [];
       document.querySelectorAll('[data-bulk-ex]').forEach(row=>{
@@ -925,6 +944,7 @@ function renderBuild(){
   } else {
     document.getElementById('editAllBtn').addEventListener('click', ()=>{
       bulkEditMode = true;
+      openBulkEditIds = new Set();
       document.getElementById('addExForm').classList.remove('open');
       renderBuild();
     });

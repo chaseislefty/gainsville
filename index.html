@@ -180,12 +180,12 @@
     </div>
 
     <div class="inline-form" id="importPanel" style="margin-bottom:16px;">
-      <p class="hint">Upload or paste your CSV (Day, Exercise, SetsReps, Unit, StartWeight, MovementType, IdealRPE, Week1, Week2...).</p>
+      <p class="hint">Upload a CSV to import it immediately (Day, Exercise, SetsReps, Unit, StartWeight, MovementType, IdealRPE, Week1, Week2...).</p>
       <input type="file" id="importCsvFile" accept=".csv">
-      <div style="margin:10px 0 6px;font-size:12px;color:var(--text-muted);">— or paste below —</div>
+      <div style="margin:14px 0 6px;font-size:12px;color:var(--text-muted);">— or paste CSV text directly —</div>
       <textarea id="importCsvPaste" style="width:100%;min-height:100px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
       <div class="btn-row">
-        <button class="btn small" id="runImportBtn">Import</button>
+        <button class="btn small" id="runImportBtn">Import Pasted Text</button>
         <button class="btn secondary small" id="cancelImportBtn">Cancel</button>
       </div>
       <div id="importResults" style="margin-top:10px;"></div>
@@ -229,24 +229,23 @@ function orderedDays(){ return [...program.days].sort((a,b)=>(a.createdAt||0)-(b
 let activeBuildDay = program.days[0] ? program.days[0].name : null;
 let activeTrainDay = null;
 let removeConfirmDay = null;
+let editingExerciseId = null;
+let renamingDay = false;
 let pyramidTargetsTemp = [];
 let demoConfirmPending = false;
 let openDrawers = new Set();
-let openExerciseDrawers = new Set();
+let openExerciseId = null;
+let exerciseDrawerInitialized = false;
 let editingWeekKey = null;
 let deleteConfirmWeekKey = null;
 
 function weekNumberFromKey(key){ return parseInt(key.substring(key.lastIndexOf('_')+1)); }
 
-function autosaveExerciseDraft(day, week, ex){
-  const inputs = document.querySelectorAll(`[data-ex="${ex.id}"]`);
-  const setsData = {};
-  inputs.forEach(inp=>{
-    const idx = inp.dataset.set;
-    if(!setsData[idx]) setsData[idx] = {};
-    setsData[idx][inp.dataset.field] = parseFloat(inp.value) || 0;
-  });
-  week.exerciseSets[ex.id] = Object.keys(setsData).sort((a,b)=>a-b).map(k=>setsData[k]);
+function autosaveField(week, exId, setIdx, field, rawValue){
+  if(!week.exerciseSets[exId]) week.exerciseSets[exId] = [];
+  if(!week.exerciseSets[exId][setIdx]) week.exerciseSets[exId][setIdx] = {};
+  const trimmed = (rawValue || '').trim();
+  week.exerciseSets[exId][setIdx][field] = trimmed === '' ? null : parseFloat(trimmed);
   saveProgram();
 }
 
@@ -573,8 +572,11 @@ function parseImportCSV(text){
     const setsRepsRaw = (cells[srIdx]||'').trim();
     let type='straight', sets=3, repMin=8, repMax=12, setTargets=null;
     const straightMatch = setsRepsRaw.match(/^(\d+)\s*x\s*(\d+)\s*-\s*(\d+)$/i);
+    const fixedMatch = setsRepsRaw.match(/^(\d+)\s*x\s*(\d+)$/i);
     if(straightMatch){
       sets = parseInt(straightMatch[1]); repMin = parseInt(straightMatch[2]); repMax = parseInt(straightMatch[3]);
+    } else if(fixedMatch){
+      sets = parseInt(fixedMatch[1]); repMin = parseInt(fixedMatch[2]); repMax = parseInt(fixedMatch[2]);
     } else {
       const tokens = setsRepsRaw.split(';').map(t=>t.trim()).filter(Boolean);
       const targets = [];
@@ -675,17 +677,10 @@ document.getElementById('cancelImportBtn').addEventListener('click', ()=>{
   document.getElementById('importPanel').classList.remove('open');
   document.getElementById('importResults').innerHTML = '';
 });
-document.getElementById('importCsvFile').addEventListener('change', (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (evt)=>{ document.getElementById('importCsvPaste').value = evt.target.result; };
-  reader.readAsText(file);
-});
-document.getElementById('runImportBtn').addEventListener('click', ()=>{
-  const text = document.getElementById('importCsvPaste').value;
+
+function runImportOnText(text){
   const resultsEl = document.getElementById('importResults');
-  if(!text.trim()){ showToast('Paste or upload a CSV first'); return; }
+  if(!text.trim()){ showToast('That file/paste looks empty'); return; }
   try{
     const { dayMap, warnings } = parseImportCSV(text);
     const { dayCount, exCount, weekCount } = applyImportedData(dayMap);
@@ -700,6 +695,20 @@ document.getElementById('runImportBtn').addEventListener('click', ()=>{
   }catch(err){
     resultsEl.innerHTML = `<p class="hint" style="color:var(--rose);">${err.message}</p>`;
   }
+}
+
+document.getElementById('importCsvFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt)=>{
+    runImportOnText(evt.target.result);
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+document.getElementById('runImportBtn').addEventListener('click', ()=>{
+  runImportOnText(document.getElementById('importCsvPaste').value);
 });
 
 document.getElementById('settingsBtn').addEventListener('click', ()=>{
@@ -755,7 +764,7 @@ function renderBuild(){
   if(!activeBuildDay || !program.days.find(d=>d.name===activeBuildDay)) activeBuildDay = program.days[0].name;
 
   dayTabs.innerHTML = orderedDays().map(d=>`<div class="day-chip ${d.name===activeBuildDay?'active':''}" data-day="${d.name}">${d.name}</div>`).join('') + `<div class="day-chip add-chip" id="addWorkoutPill">+ Add Workout</div>`;
-  dayTabs.querySelectorAll('.day-chip[data-day]').forEach(chip=>chip.addEventListener('click', ()=>{ activeBuildDay = chip.dataset.day; renderBuild(); }));
+  dayTabs.querySelectorAll('.day-chip[data-day]').forEach(chip=>chip.addEventListener('click', ()=>{ activeBuildDay = chip.dataset.day; editingExerciseId = null; renamingDay = false; renderBuild(); }));
   document.getElementById('addWorkoutPill').addEventListener('click', ()=>{
     document.getElementById('addDayForm').classList.toggle('open');
     document.getElementById('newDayName').focus();
@@ -771,9 +780,16 @@ function renderBuild(){
         <div class="ex-name">${ex.name}</div>
         <div class="ex-meta">${ex.sets} sets &middot; ${targetDesc} &middot; start ${ex.weight} ${ex.unit} &middot; RPE target ${ex.idealRpe} &middot; ${restLabel}</div>
       </div>
-      <div class="remove-x" data-remove-ex="${ex.id}">&times;</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span data-edit-ex="${ex.id}" style="color:var(--text-muted);cursor:pointer;font-size:12px;text-decoration:underline;">Edit</span>
+        <div class="remove-x" data-remove-ex="${ex.id}">&times;</div>
+      </div>
     </div>`;
   }).join('') || '<p class="hint" style="margin:8px 0 0;">No exercises in this day yet.</p>';
+
+  const dayTitleHTML = renamingDay
+    ? `<div class="field-row" style="margin-bottom:6px;"><input type="text" id="renameDayInput" value="${day.name}"><button class="btn small" id="saveRenameBtn">Save</button></div>`
+    : `<h2 class="section-title" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">${day.name} — exercises <span id="renameDayBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">rename</span></h2>`;
 
   const removeControlsHTML = (removeConfirmDay === day.name)
     ? `<span style="font-size:12px;color:var(--text-muted);align-self:center;">Remove ${day.name} and all its history?</span>
@@ -783,10 +799,10 @@ function renderBuild(){
 
   document.getElementById('dayBuilderContent').innerHTML = `
     <div class="card">
-      <h2 class="section-title" style="margin-bottom:6px;">${day.name} — exercises</h2>
+      ${dayTitleHTML}
       ${exerciseRows}
       <div class="btn-row">
-        <button class="btn small" id="toggleAddExBtn">+ Add Exercise</button>
+        <button class="btn small" id="toggleAddExBtn">${editingExerciseId ? 'Cancel Edit' : '+ Add Exercise'}</button>
         ${removeControlsHTML}
       </div>
       <div class="inline-form" id="addExForm">
@@ -814,7 +830,7 @@ function renderBuild(){
         <div class="field-row" style="margin-top:0;">
           <div><label class="field-label">Starting weight</label><input type="number" id="exWeight" value="0"></div>
           <div><label class="field-label">Unit</label>
-            <select id="exUnit"><option value="lbs">lbs</option><option value="kg">kg</option><option value="bw">bodyweight</option></select>
+            <select id="exUnit"><option value="lbs">lbs</option><option value="kg">kg</option><option value="bw">bodyweight</option><option value="band">assistance band (lbs)</option></select>
           </div>
         </div>
         <div class="field-row" style="margin-top:0;">
@@ -826,18 +842,60 @@ function renderBuild(){
           </div>
           <div></div>
         </div>
-        <div class="btn-row"><button class="btn" id="saveExBtn">Add to ${day.name}</button></div>
+        <div class="btn-row"><button class="btn" id="saveExBtn">${editingExerciseId ? 'Update Exercise' : 'Add to ' + day.name}</button></div>
       </div>
     </div>
   `;
 
   document.getElementById('toggleAddExBtn').addEventListener('click', ()=>{
+    if(editingExerciseId){ editingExerciseId = null; renderBuild(); return; }
     pyramidTargetsTemp = [];
     document.getElementById('addExForm').classList.toggle('open');
     refreshFormLayout();
   });
   document.getElementById('exType').addEventListener('change', refreshFormLayout);
   document.getElementById('exSets').addEventListener('input', refreshFormLayout);
+
+  if(renamingDay){
+    document.getElementById('saveRenameBtn').addEventListener('click', ()=>{
+      const newName = document.getElementById('renameDayInput').value.trim();
+      if(!newName){ showToast('Name can\'t be empty'); return; }
+      if(newName !== day.name && program.days.find(d=>d.name===newName)){ showToast('That day name already exists'); return; }
+      day.name = newName;
+      saveProgram();
+      renamingDay = false;
+      activeBuildDay = newName;
+      renderBuild();
+      showToast('Renamed');
+    });
+  } else {
+    document.getElementById('renameDayBtn').addEventListener('click', ()=>{
+      renamingDay = true;
+      renderBuild();
+    });
+  }
+
+  document.querySelectorAll('[data-edit-ex]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      editingExerciseId = el.dataset.editEx;
+      const ex = day.exercises.find(e=>e.id===editingExerciseId);
+      document.getElementById('addExForm').classList.add('open');
+      document.getElementById('exName').value = ex.name;
+      document.getElementById('exSets').value = ex.sets;
+      document.getElementById('exType').value = ex.type;
+      document.getElementById('exIdealRpe').value = ex.idealRpe;
+      document.getElementById('exWeight').value = ex.weight;
+      document.getElementById('exUnit').value = ex.unit;
+      document.getElementById('exMovementType').value = ex.movementType || 'compound';
+      if(ex.type === 'pyramid'){
+        pyramidTargetsTemp = ex.setTargets.map(t=>({...t}));
+      } else {
+        document.getElementById('exRepMin').value = ex.repMin;
+        document.getElementById('exRepMax').value = ex.repMax;
+      }
+      refreshFormLayout();
+    });
+  });
 
   if(removeConfirmDay === day.name){
     document.getElementById('confirmRemoveBtn').addEventListener('click', ()=>{
@@ -868,8 +926,8 @@ function renderBuild(){
     const movementType = document.getElementById('exMovementType').value;
     const unit = document.getElementById('exUnit').value;
     const weight = parseFloat(document.getElementById('exWeight').value) || 0;
-    const newId = 'ex_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
-    const base = { id:newId, name, sets, unit, weight, idealRpe, type, movementType };
+
+    const base = { name, sets, unit, weight, idealRpe, type, movementType };
     if(type==='pyramid'){
       base.setTargets = pyramidTargetsTemp.slice(0, sets);
       base.repMin = base.setTargets[0] ? base.setTargets[0].repMin : 8;
@@ -878,10 +936,21 @@ function renderBuild(){
       base.repMin = parseInt(document.getElementById('exRepMin').value) || 8;
       base.repMax = parseInt(document.getElementById('exRepMax').value) || 12;
     }
-    day.exercises.push(base);
-    saveProgram();
-    renderBuild();
-    showToast(name + ' added');
+
+    if(editingExerciseId){
+      const idx = day.exercises.findIndex(e=>e.id===editingExerciseId);
+      day.exercises[idx] = { ...base, id: editingExerciseId };
+      editingExerciseId = null;
+      saveProgram();
+      renderBuild();
+      showToast(name + ' updated');
+    } else {
+      base.id = 'ex_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+      day.exercises.push(base);
+      saveProgram();
+      renderBuild();
+      showToast(name + ' added');
+    }
   });
 
   document.querySelectorAll('[data-remove-ex]').forEach(x=>{
@@ -927,6 +996,7 @@ function getRecommendation(day, exercise, beforeWeekNumber){
   const reps = prev.sets.map(s=>s.reps);
   const rpe = avgRPE(prev.sets);
   const isBodyweight = exercise.unit === 'bw';
+  const isBand = exercise.unit === 'band';
   const increment = exercise.unit === 'kg' ? 2.5 : 5;
 
   let hitMax = true, hitMin = true;
@@ -937,10 +1007,14 @@ function getRecommendation(day, exercise, beforeWeekNumber){
   });
 
   let type, label, detail;
-  const increaseAction = isBodyweight
+  const increaseAction = isBand
+    ? `move to a lighter band — reduce assistance by ${increment} lbs`
+    : isBodyweight
     ? `add reps, slow the tempo, or start adding external load (try +${increment} lbs via a vest or belt)`
     : `try +${increment} ${exercise.unit}`;
-  const decreaseAction = isBodyweight
+  const decreaseAction = isBand
+    ? `move to a heavier band — add ${increment} lbs of assistance`
+    : isBodyweight
     ? `ease off with fewer reps, more rest, or drop ${increment} lbs of any added weight you're using`
     : (increment ? `consider dropping ${increment} ${exercise.unit} or focusing on form` : 'consider an easier variation or more rest');
 
@@ -960,7 +1034,7 @@ function getRecommendation(day, exercise, beforeWeekNumber){
     type='decrease'; label='Lower';
     detail = `Missed the rep target on at least one set last week. Maybe ${decreaseAction}.`;
   }
-  return { type, label, detail, prev, increment, isBodyweight };
+  return { type, label, detail, prev, increment, isBodyweight, isBand };
 }
 
 function badgeHTML(reco){
@@ -982,11 +1056,12 @@ function renderTrain(){
       <h2 class="section-title">Which workout are you doing?</h2>
       <div class="day-tabs" id="trainDaySelect">${orderedDays().map(d=>`<div class="day-chip" data-day="${d.name}">${d.name}</div>`).join('')}</div>
     `;
-    document.querySelectorAll('#trainDaySelect .day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeTrainDay = chip.dataset.day; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseDrawers = new Set(); renderTrain(); }));
+    document.querySelectorAll('#trainDaySelect .day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeTrainDay = chip.dataset.day; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseId = null; exerciseDrawerInitialized = false; renderTrain(); }));
     return;
   }
 
-  const dayChips = `<a href="#" id="changeWorkoutLink" style="display:inline-block;font-size:12px;color:var(--text-muted);margin-bottom:12px;text-decoration:none;">&larr; Change workout</a>`;
+  const dayChips = `<a href="#" id="changeWorkoutLink" style="display:inline-block;font-size:12px;color:var(--text-muted);margin-bottom:8px;text-decoration:none;">&larr; Change workout</a>
+    <h2 class="section-title" style="font-size:20px;color:var(--text);text-transform:none;letter-spacing:0;margin-bottom:16px;">${activeTrainDay}</h2>`;
   const day = program.days.find(d=>d.name===activeTrainDay);
 
   if(!day.exercises.length){
@@ -1002,7 +1077,7 @@ function renderTrain(){
 
   const lastWeek = day.weeks[day.weeks.length-1];
   const activeWeek = (!lastWeek.completed) ? lastWeek : null;
-  const completedWeeks = day.weeks.filter(w=>w.completed).sort((a,b)=>a.number-b.number);
+  const completedWeeks = day.weeks.filter(w=>w.completed).sort((a,b)=>b.number-a.number);
 
   const drawersHTML = completedWeeks.map(w=>{
     const key = day.name + '_' + w.number;
@@ -1049,35 +1124,42 @@ function renderTrain(){
   let footerButtonHTML = '';
 
   if(activeWeek){
-    if(openExerciseDrawers.size === 0 && day.exercises.length) openExerciseDrawers.add(day.exercises[0].id);
+    if(!exerciseDrawerInitialized){
+      openExerciseId = day.exercises[0] ? day.exercises[0].id : null;
+      exerciseDrawerInitialized = true;
+    }
     const exercisesHTML = day.exercises.map(ex=>{
       const reco = getRecommendation(day, ex, activeWeek.number);
       const ghostClass = 'ghost-' + reco.type;
       const draft = activeWeek.exerciseSets[ex.id];
-      const isOpen = openExerciseDrawers.has(ex.id);
+      const isOpen = openExerciseId === ex.id;
       const setRows = Array.from({length: ex.sets}).map((_,i)=>{
         const target = getSetTarget(ex, i);
         const prevSet = reco.prev ? (reco.prev.sets[i] || {}) : null;
         let suggestedWeight = '';
         if(prevSet && prevSet.weight !== undefined){
-          if(reco.type === 'increase') suggestedWeight = prevSet.weight + reco.increment;
-          else if(reco.type === 'decrease') suggestedWeight = Math.max(0, prevSet.weight - reco.increment);
+          if(reco.type === 'increase') suggestedWeight = reco.isBand ? Math.max(0, prevSet.weight - reco.increment) : prevSet.weight + reco.increment;
+          else if(reco.type === 'decrease') suggestedWeight = reco.isBand ? prevSet.weight + reco.increment : Math.max(0, prevSet.weight - reco.increment);
           else suggestedWeight = prevSet.weight;
         }
         const repsPlaceholder = prevSet ? (prevSet.reps ?? 'reps') : `${target.repMin}-${target.repMax}`;
-        const weightPlaceholder = prevSet ? (suggestedWeight !== '' ? suggestedWeight : 'wt') : (ex.weight || 'wt');
+        const weightPlaceholder = prevSet ? (suggestedWeight !== '' ? suggestedWeight : 'wt') : (i===0 && ex.weight ? ex.weight : 'wt');
         const rpePlaceholder = prevSet ? (prevSet.rpe ?? 'rpe') : ex.idealRpe;
 
-        const rawDraft = (draft && draft[i]) ? draft[i] : null;
-        const d = (rawDraft && (rawDraft.reps || rawDraft.weight || rawDraft.rpe)) ? rawDraft : null;
-        const repsValue = d ? (d.reps || '') : (prevSet ? (prevSet.reps ?? '') : '');
-        const weightValue = d ? (d.weight || '') : (prevSet ? suggestedWeight : (ex.weight || ''));
-        const rpeValue = d ? (d.rpe || '') : (prevSet ? (prevSet.rpe ?? '') : '');
+        const draftSet = draft ? draft[i] : undefined;
+        const repsGhostVal = prevSet ? (prevSet.reps ?? '') : '';
+        const weightGhostVal = prevSet ? suggestedWeight : (i===0 ? (ex.weight || '') : '');
+        const rpeGhostVal = prevSet ? (prevSet.rpe ?? '') : '';
 
-        const ghostAttr = (!d && prevSet) ? `class="${ghostClass}"` : '';
-        const repsAttr = `${ghostAttr} value="${repsValue}" placeholder="${repsPlaceholder}"`;
-        const weightAttr = `${ghostAttr} value="${weightValue}" placeholder="${weightPlaceholder}"`;
-        const rpeAttr = `${ghostAttr} value="${rpeValue}" placeholder="${rpePlaceholder}"`;
+        function fieldAttr(field, ghostVal, placeholderVal){
+          const touched = draftSet && draftSet[field] !== undefined && draftSet[field] !== null;
+          if(touched) return `value="${draftSet[field]}" placeholder="${placeholderVal}"`;
+          return `${prevSet ? `class="${ghostClass}"` : ''} value="${ghostVal}" placeholder="${placeholderVal}"`;
+        }
+
+        const weightAttr = fieldAttr('weight', weightGhostVal, weightPlaceholder);
+        const repsAttr = fieldAttr('reps', repsGhostVal, repsPlaceholder);
+        const rpeAttr = fieldAttr('rpe', rpeGhostVal, rpePlaceholder);
         return `
         <div class="set-row">
           <div class="set-label">${i+1}</div>
@@ -1107,20 +1189,19 @@ function renderTrain(){
         </div>`;
     }).join('');
 
-    activeSectionHTML = `<h2 class="section-title">Week ${activeWeek.number} — in progress</h2>${exercisesHTML}`;
-    footerButtonHTML = `<button class="btn" id="saveWeekBtn">Save Week ${activeWeek.number}</button>`;
+    activeSectionHTML = `<h2 class="section-title">Week ${activeWeek.number} — in progress</h2>${exercisesHTML}<div class="btn-row" style="margin-bottom:24px;"><button class="btn" id="saveWeekBtn">Save Week ${activeWeek.number}</button></div>`;
   } else {
     footerButtonHTML = `<button class="btn" id="startWeekBtn">Start Week ${lastWeek.number+1}</button>`;
   }
 
   container.innerHTML = `
     ${dayChips}
-    ${drawersHTML}
     ${activeSectionHTML}
     <div class="btn-row">${footerButtonHTML}</div>
+    ${drawersHTML}
   `;
 
-  document.getElementById('changeWorkoutLink').addEventListener('click', (e)=>{ e.preventDefault(); activeTrainDay = null; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseDrawers = new Set(); renderTrain(); });
+  document.getElementById('changeWorkoutLink').addEventListener('click', (e)=>{ e.preventDefault(); activeTrainDay = null; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseId = null; exerciseDrawerInitialized = false; renderTrain(); });
   document.querySelectorAll('[data-toggle-drawer]').forEach(hdr=>{
     hdr.addEventListener('click', ()=>{
       const key = hdr.dataset.toggleDrawer;
@@ -1131,7 +1212,7 @@ function renderTrain(){
   document.querySelectorAll('[data-toggle-exercise]').forEach(hdr=>{
     hdr.addEventListener('click', ()=>{
       const id = hdr.dataset.toggleExercise;
-      if(openExerciseDrawers.has(id)) openExerciseDrawers.delete(id); else openExerciseDrawers.add(id);
+      openExerciseId = (openExerciseId === id) ? null : id;
       renderTrain();
     });
   });
@@ -1141,9 +1222,9 @@ function renderTrain(){
   if(activeWeek){
     document.querySelectorAll('[data-ex]').forEach(inp=>{
       inp.addEventListener('input', ()=>{
-        const ex = day.exercises.find(e=>e.id===inp.dataset.ex);
-        autosaveExerciseDraft(day, activeWeek, ex);
+        autosaveField(activeWeek, inp.dataset.ex, inp.dataset.set, inp.dataset.field, inp.value);
       });
+      inp.addEventListener('blur', ()=> renderTrain());
     });
 
     day.exercises.forEach(ex=>{

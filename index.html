@@ -66,7 +66,7 @@
   .day-chip.active{background:var(--purple);color:#0B0B0D;border-color:var(--purple);font-weight:600;}
   .day-chip.add-chip{border-style:dashed;color:var(--text-muted);border-color:var(--text-muted);}
   .day-chip.add-chip:hover{color:var(--purple);border-color:var(--purple);}
-  select.pill-select{display:inline-block;width:auto;min-width:160px;padding:9px 16px;background:var(--purple);border:1.5px solid var(--purple);border-radius:100px;font-family:'Oswald',sans-serif;font-size:13px;font-weight:600;letter-spacing:.5px;color:#0B0B0D;cursor:pointer;}
+  select.pill-select{display:inline-block;width:auto;min-width:160px;padding:9px 16px;background:var(--purple);border:1.5px solid var(--purple);border-radius:100px;font-family:'Oswald',sans-serif;font-size:13px;font-weight:600;letter-spacing:.5px;color:#0B0B0D;cursor:pointer;text-align:center;text-align-last:center;}
 
   .exercise-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);}
   .exercise-row:last-child{border-bottom:none;}
@@ -164,13 +164,27 @@
   </nav>
 
   <div class="view active" id="view-build">
-    <h2 class="section-title">Days</h2>
+    <h2 class="section-title">Workouts</h2>
     <div class="day-tabs" id="buildDayTabs"></div>
 
     <div class="inline-form" id="addDayForm" style="margin-bottom:16px;">
       <div class="field-row">
         <input type="text" id="newDayName" placeholder="e.g. Push A">
         <button class="btn small" id="addDayBtn">Add</button>
+      </div>
+      <div style="margin-top:10px;">
+        <a href="#" id="togglePasteLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">or import from CSV instead</a>
+      </div>
+      <div id="pasteArea" style="display:none;margin-top:10px;">
+        <p class="hint">Upload a CSV to import a workout and its history.</p>
+        <input type="file" id="importCsvFile" accept=".csv" style="display:none;">
+        <button class="btn small" id="chooseFileBtn">Choose File</button>
+        <div style="margin:10px 0 6px;font-size:12px;color:var(--text-muted);">— or paste CSV text —</div>
+        <textarea id="importCsvPaste" style="width:100%;min-height:80px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
+        <div class="btn-row">
+          <button class="btn small" id="runImportBtn">Import Pasted Text</button>
+        </div>
+        <div id="importResults" style="margin-top:10px;"></div>
       </div>
     </div>
 
@@ -202,22 +216,6 @@
       <button id="closeSettingsBtn" aria-label="Close" style="background:transparent;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">&times;</button>
     </div>
     <div class="card" id="backupSection"></div>
-    <div class="card">
-      <h2 class="section-title" style="margin-bottom:6px;">Import</h2>
-      <p class="hint">Upload a CSV to import a workout and its history.</p>
-      <input type="file" id="importCsvFile" accept=".csv" style="display:none;">
-      <button class="btn small" id="chooseFileBtn">Choose File</button>
-      <div style="margin-top:10px;">
-        <a href="#" id="togglePasteLink" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Paste CSV text instead</a>
-      </div>
-      <div id="pasteArea" style="display:none;margin-top:10px;">
-        <textarea id="importCsvPaste" style="width:100%;min-height:80px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
-        <div class="btn-row">
-          <button class="btn small" id="runImportBtn">Import Pasted Text</button>
-        </div>
-      </div>
-      <div id="importResults" style="margin-top:10px;"></div>
-    </div>
   </div>
 </div>
 
@@ -821,6 +819,10 @@ function renderBuild(){
               </div>
               <div><label class="field-label">Ideal RPE</label><input type="number" data-field="idealRpe" value="${ex.idealRpe}" step="0.5"></div>
             </div>
+            <div style="margin-top:8px;">
+              <label class="field-label">Notes (optional)</label>
+              <input type="text" data-field="notes" value="${ex.notes||''}" placeholder="e.g. elbows tucked, pause at bottom">
+            </div>
           </div>
         </div>`;
       }).join('') || '<p class="hint" style="margin:8px 0 0;">No exercises in this day yet.</p>'
@@ -842,10 +844,10 @@ function renderBuild(){
     : `<h2 class="section-title" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">${day.name} — exercises <span id="renameDayBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">rename</span></h2>`;
 
   const removeControlsHTML = (removeConfirmDay === day.name)
-    ? `<span style="font-size:12px;color:var(--text-muted);align-self:center;">Remove ${day.name} and all its history?</span>
+    ? `<span style="font-size:12px;color:var(--text-muted);align-self:center;margin-left:auto;">Remove ${day.name} and all its history?</span>
        <button class="btn ghost-confirm small" id="confirmRemoveBtn">Yes, remove</button>
        <button class="btn secondary small" id="cancelRemoveBtn">Cancel</button>`
-    : `<button class="btn secondary small danger" id="removeDayBtn">Remove ${day.name}</button>`;
+    : `<button class="btn secondary small danger" id="removeDayBtn" style="margin-left:auto;">Remove ${day.name}</button>`;
 
   const bulkControlsHTML = bulkEditMode
     ? `<button class="btn small" id="saveBulkEditBtn">Save All Changes</button><button class="btn secondary small" id="cancelBulkEditBtn">Cancel</button>`
@@ -896,6 +898,10 @@ function renderBuild(){
           </div>
           <div></div>
         </div>
+        <div style="margin-top:0;">
+          <label class="field-label">Notes (optional)</label>
+          <input type="text" id="exNotes" placeholder="e.g. elbows tucked, pause at bottom">
+        </div>
         <div class="btn-row"><button class="btn" id="saveExBtn">Add to ${day.name}</button></div>
       </div>
     </div>
@@ -928,6 +934,7 @@ function renderBuild(){
         ex.unit = row.querySelector('[data-field="unit"]').value;
         ex.movementType = row.querySelector('[data-field="movementType"]').value;
         ex.idealRpe = parseFloat(row.querySelector('[data-field="idealRpe"]').value) || 8;
+        ex.notes = row.querySelector('[data-field="notes"]').value.trim();
         const parsed = parseSetsReps(row.querySelector('[data-field="setsreps"]').value, (msg)=> warnings.push(`${ex.name}: ${msg}`));
         ex.type = parsed.type; ex.sets = parsed.sets; ex.repMin = parsed.repMin; ex.repMax = parsed.repMax;
         if(parsed.setTargets) ex.setTargets = parsed.setTargets; else delete ex.setTargets;
@@ -1007,8 +1014,9 @@ function renderBuild(){
       const movementType = document.getElementById('exMovementType').value;
       const unit = document.getElementById('exUnit').value;
       const weight = parseFloat(document.getElementById('exWeight').value) || 0;
+      const notes = document.getElementById('exNotes').value.trim();
 
-      const base = { name, sets, unit, weight, idealRpe, type, movementType };
+      const base = { name, sets, unit, weight, idealRpe, type, movementType, notes };
       if(type==='pyramid'){
         base.setTargets = pyramidTargetsTemp.slice(0, sets);
         base.repMin = base.setTargets[0] ? base.setTargets[0].repMin : 8;
@@ -1247,11 +1255,12 @@ function renderTrain(){
       return `
         <div class="week-drawer" data-exercise-id="${ex.id}">
           <div class="week-drawer-header ${isOpen?'open':''}" data-toggle-exercise="${ex.id}">
-            <span>${ex.name}</span>
+            <span style="font-size:15px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text);font-family:'Oswald',sans-serif;">${ex.name}</span>
             <div style="display:flex;align-items:center;gap:8px;">${badgeHTML(reco)}<span class="chevron">▾</span></div>
           </div>
           <div class="week-drawer-body ${isOpen?'open':''}">
             <div class="exercise-target" style="margin-bottom:6px;">Target: ${targetLabel} &middot; ${restLabelFor(ex.movementType)}</div>
+            ${ex.notes ? `<div class="hint" style="font-style:italic;margin-bottom:6px;">📝 ${ex.notes}</div>` : ''}
             <div class="reco-text">${reco.detail}</div>
             <div style="margin-top:12px;">
               <div class="set-row"><div></div><div class="set-header-label">Weight</div><div class="set-header-label">Reps</div><div class="set-header-label">RPE</div></div>
@@ -1312,8 +1321,12 @@ function renderTrain(){
             warnDiv.textContent = `⚠ High RPE (${rpeVal}) with reps below target — consider dropping more than the usual 10–20% on your next set.`;
             warnDiv.style.color = 'var(--rose)';
             warnDiv.classList.add('show');
-          } else if(repsVal >= t.repMax && rpeVal > 0 && rpeVal <= 6){
+          } else if(repsVal > 0 && rpeVal > 0 && rpeVal <= 6){
             warnDiv.textContent = `That was easy (RPE ${rpeVal}) — consider adding weight for your next set.`;
+            warnDiv.style.color = 'var(--purple-soft)';
+            warnDiv.classList.add('show');
+          } else if(repsVal >= t.repMax && rpeVal > 0 && rpeVal <= 8){
+            warnDiv.textContent = `Hit the top of your range at RPE ${rpeVal} — consider adding weight for your next set.`;
             warnDiv.style.color = 'var(--purple-soft)';
             warnDiv.classList.add('show');
           } else if(repsVal >= t.repMin && rpeVal > 0 && rpeVal <= 8){

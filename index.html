@@ -1409,7 +1409,7 @@ function renderTrain(){
           </div>
           <div class="week-drawer-body ${isOpen?'open':''}">
             <div class="exercise-target" style="margin-bottom:6px;">Target: ${targetLabel} &middot; ${restLabelFor(ex.movementType)}</div>
-            ${ex.notes ? `<div class="hint" style="font-style:italic;margin-bottom:6px;">📝 ${ex.notes}</div>` : ''}
+            <input type="text" data-note-ex="${ex.id}" value="${ex.notes||''}" placeholder="📝 Quick note (e.g. elbows tucked)" style="width:100%;background:transparent;border:none;border-bottom:1px dashed var(--line);color:var(--text-muted);font-style:italic;font-size:13px;padding:4px 0 8px;margin-bottom:6px;">
             <div class="reco-text">${reco.detail}</div>
             <div style="margin-top:12px;">
               <div class="set-row"><div></div><div class="set-header-label">Weight</div><div class="set-header-label">Reps</div><div class="set-header-label">RPE</div></div>
@@ -1453,6 +1453,12 @@ function renderTrain(){
     document.querySelectorAll('[data-ex]').forEach(inp=>{
       inp.addEventListener('input', ()=>{
         autosaveField(activeWeek, inp.dataset.ex, inp.dataset.set, inp.dataset.field, inp.value);
+      });
+    });
+    document.querySelectorAll('[data-note-ex]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        const ex = day.exercises.find(e=>e.id===inp.dataset.noteEx);
+        if(ex){ ex.notes = inp.value; saveProgram(); }
       });
     });
 

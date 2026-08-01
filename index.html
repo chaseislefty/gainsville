@@ -1271,6 +1271,25 @@ function badgeHTML(reco){
 }
 
 // ---------- Train tab ----------
+function lastTrainedDate(day){
+  const completed = day.weeks.filter(w=>w.completed && w.date && w.date !== 'imported');
+  if(!completed.length) return null;
+  return completed.reduce((max,w)=> w.date > max ? w.date : max, completed[0].date);
+}
+
+function getSuggestedNextWorkout(){
+  const days = orderedDays();
+  if(!days.length) return null;
+  let lastTrainedDay = null, lastDate = null;
+  days.forEach(d=>{
+    const dt = lastTrainedDate(d);
+    if(dt !== null && (lastDate === null || dt > lastDate)){ lastDate = dt; lastTrainedDay = d; }
+  });
+  if(!lastTrainedDay) return days[0];
+  const idx = days.findIndex(d=>d.name===lastTrainedDay.name);
+  return days[(idx+1) % days.length];
+}
+
 function renderTrain(){
   const container = document.getElementById('trainContent');
   if(!program.days.length){
@@ -1280,9 +1299,16 @@ function renderTrain(){
   if(activeTrainDay && !program.days.find(d=>d.name===activeTrainDay)) activeTrainDay = null;
 
   if(!activeTrainDay){
+    const suggested = getSuggestedNextWorkout();
+    const suggestedName = suggested ? suggested.name : null;
+    const days = orderedDays();
+    const sortedDays = suggestedName ? [days.find(d=>d.name===suggestedName), ...days.filter(d=>d.name!==suggestedName)] : days;
     container.innerHTML = `
       <h2 class="section-title">Which workout are you doing?</h2>
-      <div class="day-tabs" id="trainDaySelect">${orderedDays().map(d=>`<div class="day-chip" data-day="${d.name}">${d.name}</div>`).join('')}</div>
+      <div class="day-tabs" id="trainDaySelect">${sortedDays.map(d=>{
+        const isNext = d.name === suggestedName;
+        return `<div class="day-chip ${isNext?'active':''}" data-day="${d.name}">${isNext ? '<span style="display:block;font-size:9px;letter-spacing:1px;opacity:.75;margin-bottom:2px;">SUGGESTED NEXT</span>' : ''}${d.name}</div>`;
+      }).join('')}</div>
     `;
     document.querySelectorAll('#trainDaySelect .day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeTrainDay = chip.dataset.day; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseId = null; exerciseDrawerInitialized = false; renderTrain(); }));
     return;

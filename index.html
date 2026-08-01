@@ -1396,14 +1396,15 @@ function renderTrain(){
           else if(reco.type === 'decrease') suggestedWeight = reco.isBand ? prevSet.weight + reco.increment : Math.max(0, prevSet.weight - reco.increment);
           else suggestedWeight = prevSet.weight;
         }
-        const repsPlaceholder = prevSet ? (prevSet.reps ?? 'reps') : `${target.repMin}-${target.repMax}`;
+        const isWeightChange = reco.type === 'increase' || reco.type === 'decrease';
+        const repsPlaceholder = prevSet ? (isWeightChange ? `${target.repMin}-${target.repMax}` : (prevSet.reps ?? 'reps')) : `${target.repMin}-${target.repMax}`;
         const weightPlaceholder = prevSet ? (suggestedWeight !== '' ? suggestedWeight : 'wt') : (i===0 && ex.weight ? ex.weight : 'wt');
-        const rpePlaceholder = prevSet ? (prevSet.rpe ?? 'rpe') : ex.idealRpe;
+        const rpePlaceholder = prevSet ? (isWeightChange ? ex.idealRpe : (prevSet.rpe ?? 'rpe')) : ex.idealRpe;
 
         const draftSet = draft ? draft[i] : undefined;
-        const repsGhostVal = prevSet ? (prevSet.reps ?? '') : '';
+        const repsGhostVal = prevSet ? (isWeightChange ? '' : (prevSet.reps ?? '')) : '';
         const weightGhostVal = prevSet ? suggestedWeight : (i===0 ? (ex.weight || '') : '');
-        const rpeGhostVal = prevSet ? (prevSet.rpe ?? '') : '';
+        const rpeGhostVal = prevSet ? (isWeightChange ? '' : (prevSet.rpe ?? '')) : '';
 
         function fieldAttr(field, ghostVal, placeholderVal){
           const touched = draftSet && draftSet[field] !== undefined && draftSet[field] !== null;

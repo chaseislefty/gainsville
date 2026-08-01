@@ -1302,12 +1302,11 @@ function renderTrain(){
     const suggested = getSuggestedNextWorkout();
     const suggestedName = suggested ? suggested.name : null;
     const days = orderedDays();
-    const sortedDays = suggestedName ? [days.find(d=>d.name===suggestedName), ...days.filter(d=>d.name!==suggestedName)] : days;
     container.innerHTML = `
       <h2 class="section-title">Which workout are you doing?</h2>
-      <div class="day-tabs" id="trainDaySelect">${sortedDays.map(d=>{
+      <div class="day-tabs" id="trainDaySelect">${days.map(d=>{
         const isNext = d.name === suggestedName;
-        return `<div class="day-chip ${isNext?'active':''}" data-day="${d.name}">${isNext ? '<span style="display:block;font-size:9px;letter-spacing:1px;opacity:.75;margin-bottom:2px;">SUGGESTED NEXT</span>' : ''}${d.name}</div>`;
+        return `<div class="day-chip ${isNext?'active':''}" data-day="${d.name}">${d.name}</div>`;
       }).join('')}</div>
     `;
     document.querySelectorAll('#trainDaySelect .day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeTrainDay = chip.dataset.day; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseId = null; exerciseDrawerInitialized = false; renderTrain(); }));

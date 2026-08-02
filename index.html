@@ -902,12 +902,11 @@ function renderBuild(){
       }).join('') || '<p class="hint" style="margin:8px 0 0;">No exercises in this day yet.</p>'
     : day.exercises.filter(ex=>!ex.archived).map(ex=>{
         const targetDesc = ex.type==='pyramid' ? ex.setTargets.map(t=>t.repMin+'-'+t.repMax).join(' / ') : `${ex.repMin}-${ex.repMax}`;
-        const restLabel = restLabelFor(ex.movementType);
         return `
         <div class="exercise-row">
           <div>
             <div class="ex-name">${ex.name}</div>
-            <div class="ex-meta">${ex.sets} sets &middot; ${targetDesc} &middot; start ${ex.weight} ${ex.unit} &middot; RPE target ${ex.idealRpe} &middot; ${restLabel}</div>
+            <div class="ex-meta">${ex.sets} sets &middot; ${targetDesc} &middot; RPE target ${ex.idealRpe} &middot; ${movementTypeShort(ex.movementType)}${ex.unit==='band' ? ' &middot; Band assisted' : ''}</div>
           </div>
         </div>`;
       }).join('') || '<p class="hint" style="margin:8px 0 0;">No exercises in this day yet.</p>';
@@ -1198,6 +1197,10 @@ function getSetTarget(exercise, setIndex){
 
 function restLabelFor(movementType){
   return movementType === 'isolation' ? 'Isolation · rest ~60-90 sec' : 'Compound · rest ~2-3 min';
+}
+
+function movementTypeShort(movementType){
+  return movementType === 'isolation' ? 'Isolation' : 'Compound';
 }
 
 function getPreviousCompletedWeekData(day, exerciseId, beforeWeekNumber){

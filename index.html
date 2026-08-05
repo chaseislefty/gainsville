@@ -913,7 +913,7 @@ function renderBuild(){
 
   const dayTitleHTML = renamingDay
     ? `<div class="field-row" style="margin-bottom:6px;"><input type="text" id="renameDayInput" value="${day.name}"><button class="btn small" id="saveRenameBtn">Save</button></div>`
-    : `<h2 class="section-title" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">${day.name} — exercises <span id="renameDayBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">rename</span> <span id="duplicateDayBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">duplicate</span></h2>`;
+    : `<h2 class="section-title" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">${day.name} — exercises <span id="renameDayBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">rename</span> <span id="duplicateDayBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">duplicate</span> <span id="moveDayEarlierBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">move earlier</span> <span id="moveDayLaterBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">move later</span></h2>`;
 
   const removeControlsHTML = (removeConfirmDay === day.name)
     ? `<span style="font-size:12px;color:var(--text-muted);align-self:center;margin-left:auto;">Remove ${day.name} and all its history?</span>
@@ -1187,6 +1187,23 @@ function renderBuild(){
       showToast('Duplicated as ' + candidate);
     });
   }
+
+  function moveWorkout(dir){
+    const ordered = orderedDays();
+    const idx = ordered.findIndex(d=>d.name===day.name);
+    const swapIdx = dir==='earlier' ? idx-1 : idx+1;
+    if(swapIdx < 0 || swapIdx >= ordered.length) return;
+    const a = ordered[idx], b = ordered[swapIdx];
+    const tmp = a.createdAt;
+    a.createdAt = b.createdAt;
+    b.createdAt = tmp;
+    saveProgram();
+    renderBuild();
+  }
+  const moveEarlierBtn = document.getElementById('moveDayEarlierBtn');
+  const moveLaterBtn = document.getElementById('moveDayLaterBtn');
+  if(moveEarlierBtn) moveEarlierBtn.addEventListener('click', ()=> moveWorkout('earlier'));
+  if(moveLaterBtn) moveLaterBtn.addEventListener('click', ()=> moveWorkout('later'));
 }
 
 // ---------- Helpers shared by Train + Progress ----------

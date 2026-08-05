@@ -231,7 +231,15 @@
 <script>
 // ---------- State ----------
 let program = JSON.parse(localStorage.getItem('gv_program') || '{"days":[]}');
-program.days.forEach((d,idx)=>{ if(!d.weeks) d.weeks = []; if(d.createdAt===undefined) d.createdAt = idx; d.exercises.forEach(ex=>{ delete ex.lineageId; }); });
+program.days.forEach((d,idx)=>{
+  if(!d.weeks) d.weeks = [];
+  if(d.createdAt===undefined) d.createdAt = idx;
+  if(d.lastCompletedAt===undefined){
+    const realTimes = d.weeks.filter(w=>w.completed && w.date && w.date!=='imported').map(w=>new Date(w.date).getTime()).filter(t=>!isNaN(t));
+    d.lastCompletedAt = realTimes.length ? Math.max(...realTimes) : null;
+  }
+  d.exercises.forEach(ex=>{ delete ex.lineageId; });
+});
 function orderedDays(){ return [...program.days].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)); }
 let activeBuildDay = program.days[0] ? program.days[0].name : null;
 let activeTrainDay = null;
@@ -370,7 +378,14 @@ function restoreFromFileInput(file){
 function confirmRestore(){
   if(!pendingRestoreData) return;
   program = pendingRestoreData;
-  program.days.forEach((d,idx)=>{ if(!d.weeks) d.weeks=[]; if(d.createdAt===undefined) d.createdAt=idx; });
+  program.days.forEach((d,idx)=>{
+    if(!d.weeks) d.weeks=[];
+    if(d.createdAt===undefined) d.createdAt=idx;
+    if(d.lastCompletedAt===undefined){
+      const realTimes = d.weeks.filter(w=>w.completed && w.date && w.date!=='imported').map(w=>new Date(w.date).getTime()).filter(t=>!isNaN(t));
+      d.lastCompletedAt = realTimes.length ? Math.max(...realTimes) : null;
+    }
+  });
   pendingRestoreData = null;
   saveProgram();
   activeBuildDay = program.days[0] ? program.days[0].name : null;
@@ -1291,19 +1306,12 @@ function badgeHTML(reco){
 }
 
 // ---------- Train tab ----------
-function lastTrainedDate(day){
-  const completed = day.weeks.filter(w=>w.completed && w.date && w.date !== 'imported');
-  if(!completed.length) return null;
-  return completed.reduce((max,w)=> w.date > max ? w.date : max, completed[0].date);
-}
-
 function getSuggestedNextWorkout(){
   const days = orderedDays();
   if(!days.length) return null;
-  let lastTrainedDay = null, lastDate = null;
+  let lastTrainedDay = null, lastAt = null;
   days.forEach(d=>{
-    const dt = lastTrainedDate(d);
-    if(dt !== null && (lastDate === null || dt > lastDate)){ lastDate = dt; lastTrainedDay = d; }
+    if(d.lastCompletedAt && (lastAt === null || d.lastCompletedAt > lastAt)){ lastAt = d.lastCompletedAt; lastTrainedDay = d; }
   });
   if(!lastTrainedDay) return days[0];
   const idx = days.findIndex(d=>d.name===lastTrainedDay.name);
@@ -1607,6 +1615,7 @@ function saveActiveWeek(day, week){
   if(savedCount === 0){ showToast('Log at least one set before saving'); return; }
   week.completed = true;
   week.date = new Date().toISOString().slice(0,10);
+  day.lastCompletedAt = Date.now();
   saveProgram();
   showToast('Week ' + week.number + ' saved');
   renderTrain();

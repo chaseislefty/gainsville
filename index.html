@@ -1480,7 +1480,6 @@ function renderTrain(){
 
     activeSectionHTML = `<h2 class="section-title">Week ${activeWeek.number} — in progress</h2><div style="margin-bottom:14px;">${summaryHTML}</div>${exercisesHTML}<div class="btn-row" style="margin-bottom:24px;align-items:center;">
       <button class="btn" id="saveWeekBtn">Save Week ${activeWeek.number}</button>
-      <label style="font-size:11px;color:var(--text-muted);">Date <input type="date" id="weekDateInput" value="${new Date().toISOString().slice(0,10)}" style="background:var(--surface-2);border:1px solid var(--line);border-radius:4px;color:var(--text);padding:6px 8px;font-size:12px;margin-left:6px;"></label>
     </div>`;
   } else {
     footerButtonHTML = `<button class="btn" id="startWeekBtn">Start Week ${lastWeek.number+1}</button>`;
@@ -1623,9 +1622,8 @@ function saveActiveWeek(day, week){
   });
 
   if(savedCount === 0){ showToast('Log at least one set before saving'); return; }
-  const dateInput = document.getElementById('weekDateInput');
   week.completed = true;
-  week.date = (dateInput && dateInput.value) ? dateInput.value : new Date().toISOString().slice(0,10);
+  week.date = new Date().toISOString().slice(0,10);
   saveProgram();
   showToast('Week ' + week.number + ' saved');
   activeTrainDay = null;

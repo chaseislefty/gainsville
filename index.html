@@ -1628,6 +1628,11 @@ function saveActiveWeek(day, week){
   week.date = (dateInput && dateInput.value) ? dateInput.value : new Date().toISOString().slice(0,10);
   saveProgram();
   showToast('Week ' + week.number + ' saved');
+  activeTrainDay = null;
+  editingWeekKey = null;
+  deleteConfirmWeekKey = null;
+  openExerciseId = null;
+  exerciseDrawerInitialized = false;
   renderTrain();
 }
 

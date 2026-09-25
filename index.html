@@ -1410,10 +1410,8 @@ function renderTrain(){
       openExerciseId = activeExercises[0] ? activeExercises[0].id : null;
       exerciseDrawerInitialized = true;
     }
-    const seenDetails = [];
     const exercisesHTML = activeExercises.map(ex=>{
       const reco = getRecommendation(day, ex, activeWeek.number);
-      if(!seenDetails.some(d=>d.text===reco.detail)) seenDetails.push({type:reco.type, label:reco.label, text:reco.detail});
       const ghostClass = 'ghost-' + reco.type;
       const draft = activeWeek.exerciseSets[ex.id];
       const isOpen = openExerciseId === ex.id;
@@ -1476,8 +1474,13 @@ function renderTrain(){
         </div>`;
     }).join('');
 
-    const dotColor = { increase: 'var(--purple-soft)', maintain: 'var(--text-muted)', decrease: 'var(--rose)', new: 'var(--text-muted)' };
-    const summaryHTML = seenDetails.map(d=>`<div class="reco-text" style="margin-bottom:8px;display:flex;align-items:baseline;gap:8px;"><span style="color:${dotColor[d.type]};flex-shrink:0;">&bull;</span><span>${d.text}</span></div>`).join('');
+    const legend = [
+      { type:'increase', text:'Increase — hit your rep target with room to spare (or RPE was low). Try adding weight next set.' },
+      { type:'maintain', text:'Maintain — hit your rep target, but not with much room to spare. Keep the weight the same.' },
+      { type:'decrease', text:'Lower — missed the rep target. Consider dropping weight or focusing on form.' }
+    ];
+    const dotColor = { increase: 'var(--purple-soft)', maintain: 'var(--text-muted)', decrease: 'var(--rose)' };
+    const summaryHTML = legend.map(d=>`<div class="reco-text" style="margin-bottom:8px;display:flex;align-items:baseline;gap:8px;"><span style="color:${dotColor[d.type]};flex-shrink:0;">&bull;</span><span>${d.text}</span></div>`).join('');
 
     activeSectionHTML = `<h2 class="section-title">Week ${activeWeek.number} — in progress</h2><div style="margin-bottom:14px;">${summaryHTML}</div>${exercisesHTML}<div class="btn-row" style="margin-bottom:24px;align-items:center;">
       <button class="btn" id="saveWeekBtn">Save Week ${activeWeek.number}</button>

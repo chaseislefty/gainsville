@@ -1476,7 +1476,8 @@ function renderTrain(){
         </div>`;
     }).join('');
 
-    const summaryHTML = seenDetails.map(d=>`<div class="reco-text" style="margin-bottom:8px;display:flex;align-items:baseline;gap:8px;">${badgeHTML(d)}<span>${d.text}</span></div>`).join('');
+    const dotColor = { increase: 'var(--purple-soft)', maintain: 'var(--text-muted)', decrease: 'var(--rose)', new: 'var(--text-muted)' };
+    const summaryHTML = seenDetails.map(d=>`<div class="reco-text" style="margin-bottom:8px;display:flex;align-items:baseline;gap:8px;"><span style="color:${dotColor[d.type]};flex-shrink:0;">&bull;</span><span>${d.text}</span></div>`).join('');
 
     activeSectionHTML = `<h2 class="section-title">Week ${activeWeek.number} — in progress</h2><div style="margin-bottom:14px;">${summaryHTML}</div>${exercisesHTML}<div class="btn-row" style="margin-bottom:24px;align-items:center;">
       <button class="btn" id="saveWeekBtn">Save Week ${activeWeek.number}</button>

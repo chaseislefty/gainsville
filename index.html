@@ -170,7 +170,12 @@
   </nav>
 
   <div class="view active" id="view-build">
-    <h2 class="section-title">Workouts</h2>
+    <div class="day-tabs" id="buildSectionTabs"></div>
+
+    <div id="programsPanel" style="display:none;"></div>
+
+    <div id="workoutsPanel">
+    <div id="programContextLine"></div>
     <div class="day-tabs" id="buildDayTabs"></div>
 
     <div class="inline-form" id="addDayForm">
@@ -199,6 +204,7 @@
     </div>
 
     <div id="dayBuilderContent"></div>
+    </div>
   </div>
 
   <div class="view" id="view-train">
@@ -230,13 +236,51 @@
 
 <script>
 // ---------- State ----------
-let program = JSON.parse(localStorage.getItem('gv_program') || '{"days":[]}');
-program.days.forEach((d,idx)=>{
-  if(!d.weeks) d.weeks = [];
-  if(d.createdAt===undefined) d.createdAt = idx;
-  delete d.lastCompletedAt;
-  d.exercises.forEach(ex=>{ delete ex.lineageId; });
-});
+// store = { schemaVersion, activeProgramId, programs:[{id,name,createdAt,days:[]}] }
+// `program` always points at the ACTIVE program object, so everything below that uses program.days
+// automatically works on whichever program is selected.
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function normalizeStore(raw){
+  let s;
+  if(raw && Array.isArray(raw.programs) && raw.programs.length){
+    s = raw;
+  } else if(raw && Array.isArray(raw.days)){
+    // Older single-program data: wrap it as the first program, nothing inside it changes
+    s = { programs:[{ id:makeId('prog'), name:'My Program', createdAt:Date.now(), days: raw.days }] };
+  } else {
+    s = { programs:[{ id:makeId('prog'), name:'My Program', createdAt:Date.now(), days:[] }] };
+  }
+  s.schemaVersion = 2;
+  s.programs.forEach((p,pi)=>{
+    if(!p.id) p.id = makeId('prog');
+    if(!p.name) p.name = 'Program ' + (pi+1);
+    if(!p.createdAt) p.createdAt = pi;
+    if(!Array.isArray(p.days)) p.days = [];
+    p.days.forEach((d,idx)=>{
+      if(!d.weeks) d.weeks = [];
+      if(d.createdAt===undefined) d.createdAt = idx;
+      delete d.lastCompletedAt;
+      d.exercises.forEach(ex=>{ delete ex.lineageId; });
+    });
+  });
+  if(!s.programs.find(p=>p.id===s.activeProgramId)) s.activeProgramId = s.programs[0].id;
+  return s;
+}
+
+function loadStore(){
+  const rawStr = localStorage.getItem('gv_program');
+  let raw = null;
+  try{ raw = rawStr ? JSON.parse(rawStr) : null; }catch(e){ raw = null; }
+  // One-time safety copy of the pre-programs data before it gets re-saved in the new shape
+  if(raw && !raw.programs && Array.isArray(raw.days) && !localStorage.getItem('gv_program_pre_programs')){
+    try{ localStorage.setItem('gv_program_pre_programs', rawStr); }catch(e){}
+  }
+  return normalizeStore(raw);
+}
+
+let store = loadStore();
+let program = store.programs.find(p=>p.id===store.activeProgramId);
 function orderedDays(){ return [...program.days].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)); }
 let activeBuildDay = program.days[0] ? program.days[0].name : null;
 let activeTrainDay = null;
@@ -252,6 +296,35 @@ let openExerciseId = null;
 let exerciseDrawerInitialized = false;
 let editingWeekKey = null;
 let deleteConfirmWeekKey = null;
+let buildSection = 'workouts'; // 'workouts' | 'programs'
+let addingProgram = false;
+let renamingProgram = false;
+let removeProgramConfirm = false;
+
+function resetViewState(){
+  activeBuildDay = program.days[0] ? program.days[0].name : null;
+  activeTrainDay = null;
+  removeConfirmDay = null;
+  bulkEditMode = false;
+  openBulkEditIds = new Set();
+  renamingDay = false;
+  removeExerciseConfirmId = null;
+  openDrawers = new Set();
+  openExerciseId = null;
+  exerciseDrawerInitialized = false;
+  editingWeekKey = null;
+  deleteConfirmWeekKey = null;
+  renamingProgram = false;
+  removeProgramConfirm = false;
+}
+
+function activateProgram(id){
+  const p = store.programs.find(x=>x.id===id) || store.programs[0];
+  store.activeProgramId = p.id;
+  program = p;
+  resetViewState();
+  saveProgram();
+}
 
 function weekNumberFromKey(key){ return parseInt(key.substring(key.lastIndexOf('_')+1)); }
 
@@ -263,7 +336,7 @@ function autosaveField(week, exId, setIdx, field, rawValue){
   saveProgram();
 }
 
-function saveProgram(){ localStorage.setItem('gv_program', JSON.stringify(program)); writeBackupFile(); }
+function saveProgram(){ localStorage.setItem('gv_program', JSON.stringify(store)); writeBackupFile(); }
 
 // ---------- Backup: IndexedDB handle storage ----------
 const BACKUP_DB = 'gainsville_db', BACKUP_STORE = 'handles';
@@ -300,7 +373,7 @@ let backupStatus = 'none'; // none | connected | needs-permission | unsupported
 let pendingRestoreData = null;
 
 function backupPayload(){
-  return JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), program }, null, 2);
+  return JSON.stringify({ schemaVersion: 2, exportedAt: new Date().toISOString(), store }, null, 2);
 }
 
 async function writeBackupFile(){
@@ -363,9 +436,10 @@ function restoreFromFileInput(file){
   reader.onload = (e)=>{
     try{
       const data = JSON.parse(e.target.result);
-      const restoredProgram = data.program || data;
-      if(!restoredProgram || !Array.isArray(restoredProgram.days)) throw new Error('bad format');
-      pendingRestoreData = restoredProgram;
+      // Accepts new backups (store with programs) and older ones (single program with days)
+      const restored = data.store || data.program || data;
+      if(!restored || !(Array.isArray(restored.programs) || Array.isArray(restored.days))) throw new Error('bad format');
+      pendingRestoreData = restored;
       renderBackupSection();
     }catch(err){ showToast('Could not read that file — check the format'); }
   };
@@ -374,14 +448,11 @@ function restoreFromFileInput(file){
 
 function confirmRestore(){
   if(!pendingRestoreData) return;
-  program = pendingRestoreData;
-  program.days.forEach((d,idx)=>{
-    if(!d.weeks) d.weeks=[];
-    if(d.createdAt===undefined) d.createdAt=idx;
-  });
+  store = normalizeStore(pendingRestoreData);
+  program = store.programs.find(p=>p.id===store.activeProgramId);
   pendingRestoreData = null;
+  resetViewState();
   saveProgram();
-  activeBuildDay = program.days[0] ? program.days[0].name : null;
   renderBuild();
   showToast('Backup restored');
 }
@@ -446,7 +517,7 @@ function showToast(msg){
 
 function updateExerciseLibrary(){
   const names = new Set();
-  program.days.forEach(d=>d.exercises.forEach(e=>names.add(e.name)));
+  store.programs.forEach(p=>p.days.forEach(d=>d.exercises.forEach(e=>names.add(e.name))));
   const sorted = [...names].sort((a,b)=>a.localeCompare(b));
   document.getElementById('exerciseLibrary').innerHTML = sorted.map(n=>`<option value="${n}">`).join('');
 }
@@ -511,13 +582,11 @@ function loadDemoData(){
     ],
     weeks: []
   };
-  program = { days: [pushA, pushB] };
-  saveProgram();
+  store = normalizeStore({ programs:[{ id:makeId('prog'), name:'Demo Program', createdAt:Date.now(), days:[pushA, pushB] }] });
+  program = store.programs.find(p=>p.id===store.activeProgramId);
+  resetViewState();
   activeBuildDay = 'Push A';
-  activeTrainDay = null;
-  openDrawers = new Set();
-  editingWeekKey = null;
-  deleteConfirmWeekKey = null;
+  saveProgram();
   renderBuild();
   showToast('Demo data loaded');
 }
@@ -528,7 +597,7 @@ function attachLoadDemoListener(){
   link.addEventListener('click', (e)=>{
     e.preventDefault();
     const row = document.getElementById('demoDataRow');
-    row.innerHTML = `<span style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:8px;">This replaces your current program and history. Continue?</span>
+    row.innerHTML = `<span style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:8px;">This replaces ALL your programs and history. Continue?</span>
       <div class="btn-row" style="margin-top:0;">
         <button class="btn ghost-confirm small" id="confirmDemoBtn">Yes, load demo</button>
         <button class="btn secondary small" id="cancelDemoBtn">Cancel</button>
@@ -815,7 +884,150 @@ function refreshFormLayout(){
   if(type==='pyramid') renderPyramidRows(sets);
 }
 
+// ---------- Build tab: programs ----------
+function programLabelHTML(){
+  // Small muted program name, only shown once there is more than one program
+  return store.programs.length > 1
+    ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Program: <span style="color:var(--text);">${esc(program.name)}</span></div>`
+    : '';
+}
+
+function renderBuildSectionTabs(){
+  const el = document.getElementById('buildSectionTabs');
+  el.innerHTML = `
+    <div class="day-chip ${buildSection==='programs'?'active':''}" data-section="programs">Programs</div>
+    <div class="day-chip ${buildSection==='workouts'?'active':''}" data-section="workouts">Workouts</div>`;
+  el.querySelectorAll('[data-section]').forEach(chip=>chip.addEventListener('click', ()=>{
+    buildSection = chip.dataset.section;
+    addingProgram = false; renamingProgram = false; removeProgramConfirm = false;
+    renderBuild();
+  }));
+  document.getElementById('programsPanel').style.display = buildSection==='programs' ? 'block' : 'none';
+  document.getElementById('workoutsPanel').style.display = buildSection==='workouts' ? 'block' : 'none';
+}
+
+function renderPrograms(){
+  const panel = document.getElementById('programsPanel');
+  const progs = [...store.programs].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+
+  const addFormHTML = addingProgram ? `
+    <div class="inline-form open" style="margin-bottom:16px;">
+      <div style="display:flex;gap:10px;">
+        <input type="text" id="newProgramName" placeholder="e.g. Upper / Lower" style="flex:1;">
+        <button class="btn small" id="addProgramBtn" style="flex-shrink:0;">Add</button>
+      </div>
+    </div>` : '';
+
+  const nameHTML = renamingProgram
+    ? `<div style="display:flex;gap:10px;margin-bottom:10px;">
+         <input type="text" id="renameProgramInput" value="${esc(program.name)}" style="flex:1;">
+         <button class="btn small" id="saveProgramNameBtn" style="flex-shrink:0;">Save</button>
+         <button class="btn secondary small" id="cancelProgramNameBtn" style="flex-shrink:0;">Cancel</button>
+       </div>`
+    : `<h2 class="section-title" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">${esc(program.name)}
+         <span id="renameProgramBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">rename</span>
+         ${store.programs.length > 1 ? `<span id="deleteProgramBtn" style="cursor:pointer;color:var(--text-muted);font-size:11px;text-decoration:underline;text-transform:none;letter-spacing:0;">delete</span>` : ''}
+       </h2>`;
+
+  const deleteHTML = removeProgramConfirm ? `
+    <p class="hint">Delete ${esc(program.name)}? This removes its workouts and all logged history. This can't be undone.</p>
+    <div class="btn-row" style="margin-top:0;margin-bottom:12px;">
+      <button class="btn ghost-confirm small" id="confirmDeleteProgramBtn">Yes, delete</button>
+      <button class="btn secondary small" id="cancelDeleteProgramBtn">Cancel</button>
+    </div>` : '';
+
+  const workouts = orderedDays();
+  const workoutsListHTML = workouts.length
+    ? workouts.map(d=>{
+        const n = d.exercises.filter(ex=>!ex.archived).length;
+        const done = d.weeks.filter(w=>w.completed).length;
+        return `<div class="week-summary-row"><div class="wn">${esc(d.name)}</div><div class="wv">${n} exercise${n===1?'':'s'} &middot; ${done} week${done===1?'':'s'} logged</div></div>`;
+      }).join('')
+    : `<p class="hint" style="margin:0;">No workouts in this program yet. Add them on the Workouts pill.</p>`;
+
+  panel.innerHTML = `
+    <div class="day-tabs">
+      <div class="day-chip add-chip" id="addProgramPill">+ Add Program</div>
+      <select id="programSelectPill" class="pill-select">
+        ${progs.map(p=>`<option value="${esc(p.id)}" ${p.id===store.activeProgramId?'selected':''}>${esc(p.name)}</option>`).join('')}
+      </select>
+    </div>
+    ${addFormHTML}
+    <div class="card">
+      ${nameHTML}
+      ${deleteHTML}
+      <p class="hint">The program selected here is the one you train and track. Other programs and their history stay untouched.</p>
+      ${workoutsListHTML}
+    </div>`;
+
+  document.getElementById('programSelectPill').addEventListener('change', (e)=>{
+    activateProgram(e.target.value);
+    renderBuild();
+    showToast('Switched to ' + program.name);
+  });
+  document.getElementById('addProgramPill').addEventListener('click', ()=>{
+    addingProgram = !addingProgram; renderPrograms();
+    if(addingProgram) document.getElementById('newProgramName').focus();
+  });
+
+  function nameTaken(name, exceptId){
+    return store.programs.some(p=>p.id!==exceptId && p.name.toLowerCase()===name.toLowerCase());
+  }
+
+  if(addingProgram){
+    const addBtn = document.getElementById('addProgramBtn');
+    const input = document.getElementById('newProgramName');
+    addBtn.addEventListener('click', ()=>{
+      const name = input.value.trim();
+      if(!name){ showToast('Name the program first'); return; }
+      if(nameTaken(name)){ showToast('That program already exists'); return; }
+      const p = { id:makeId('prog'), name, createdAt:Date.now(), days:[] };
+      store.programs.push(p);
+      addingProgram = false;
+      activateProgram(p.id);
+      buildSection = 'workouts';
+      renderBuild();
+      showToast('Program added: ' + name);
+    });
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') addBtn.click(); });
+  }
+
+  if(renamingProgram){
+    const input = document.getElementById('renameProgramInput');
+    input.focus(); input.select();
+    const save = ()=>{
+      const name = input.value.trim();
+      if(!name){ showToast('Name can\'t be empty'); return; }
+      if(nameTaken(name, program.id)){ showToast('That program already exists'); return; }
+      program.name = name;
+      renamingProgram = false;
+      saveProgram(); renderPrograms();
+    };
+    document.getElementById('saveProgramNameBtn').addEventListener('click', save);
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') save(); });
+    document.getElementById('cancelProgramNameBtn').addEventListener('click', ()=>{ renamingProgram = false; renderPrograms(); });
+  } else {
+    document.getElementById('renameProgramBtn').addEventListener('click', ()=>{ renamingProgram = true; removeProgramConfirm = false; renderPrograms(); });
+    const delBtn = document.getElementById('deleteProgramBtn');
+    if(delBtn) delBtn.addEventListener('click', ()=>{ removeProgramConfirm = true; renderPrograms(); });
+  }
+
+  if(removeProgramConfirm){
+    document.getElementById('confirmDeleteProgramBtn').addEventListener('click', ()=>{
+      const removedName = program.name;
+      store.programs = store.programs.filter(p=>p.id!==program.id);
+      activateProgram(store.programs[0].id);
+      renderBuild();
+      showToast('Deleted ' + removedName);
+    });
+    document.getElementById('cancelDeleteProgramBtn').addEventListener('click', ()=>{ removeProgramConfirm = false; renderPrograms(); });
+  }
+}
+
 function renderBuild(){
+  renderBuildSectionTabs();
+  if(buildSection === 'programs'){ renderPrograms(); return; }
+  document.getElementById('programContextLine').innerHTML = programLabelHTML();
   updateExerciseLibrary();
   const dayTabs = document.getElementById('buildDayTabs');
   if(!program.days.length){
@@ -1330,6 +1542,7 @@ function renderTrain(){
     const suggestedName = suggested ? suggested.name : null;
     const days = orderedDays();
     container.innerHTML = `
+      ${programLabelHTML()}
       <h2 class="section-title">Which workout are you doing?</h2>
       <div class="day-tabs" id="trainDaySelect">${days.map(d=>{
         const isNext = d.name === suggestedName;
@@ -1482,7 +1695,9 @@ function renderTrain(){
     const dotColor = { increase: 'var(--purple-soft)', maintain: 'var(--text-muted)', decrease: 'var(--rose)' };
     const summaryHTML = legend.map(d=>`<div class="reco-text" style="margin-bottom:8px;display:flex;align-items:baseline;gap:8px;"><span style="color:${dotColor[d.type]};flex-shrink:0;">&bull;</span><span>${d.text}</span></div>`).join('');
 
-    activeSectionHTML = `<h2 class="section-title">Week ${activeWeek.number} — in progress</h2><div style="margin-bottom:14px;">${summaryHTML}</div>${exercisesHTML}<div class="btn-row" style="margin-bottom:24px;align-items:center;">
+    const swapReminderHTML = (activeWeek.number % 6 === 0) ? `<div style="background:var(--surface-2);border-left:3px solid var(--purple-soft);border-radius:4px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--text);">Week ${activeWeek.number} — this is usually a good point to swap out a few exercises to keep progressing.</div>` : '';
+
+    activeSectionHTML = `<h2 class="section-title">Week ${activeWeek.number} — in progress</h2>${swapReminderHTML}<div style="margin-bottom:14px;">${summaryHTML}</div>${exercisesHTML}<div class="btn-row" style="margin-bottom:24px;align-items:center;">
       <button class="btn" id="saveWeekBtn">Save Week ${activeWeek.number}</button>
     </div>`;
   } else {
@@ -1647,6 +1862,7 @@ function renderProgress(){
     return;
   }
   container.innerHTML = `
+    ${programLabelHTML()}
     <h2 class="section-title">Select workout</h2>
     <select id="progressDaySelect">${daysWithData.map(d=>`<option value="${d.name}">${d.name}</option>`).join('')}</select>
     <div style="margin-top:12px;">

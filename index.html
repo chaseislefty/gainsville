@@ -227,6 +227,7 @@
       <h2 class="section-title" style="margin:0;">Settings</h2>
       <button id="closeSettingsBtn" aria-label="Close" style="background:transparent;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">&times;</button>
     </div>
+    <div class="card" id="trainSettingsSection"></div>
     <div class="card" id="backupSection"></div>
   </div>
 </div>
@@ -292,7 +293,22 @@ let removeExerciseConfirmId = null;
 let pyramidTargetsTemp = [];
 let demoConfirmPending = false;
 let openDrawers = new Set();
-let openExerciseId = null;
+let openExerciseIds = new Set();
+
+// ---------- Settings (device-level UI preferences, not part of the program data/backup) ----------
+function loadSettings(){
+  let s = {};
+  try{ s = JSON.parse(localStorage.getItem('gv_settings') || '{}') || {}; }catch(e){ s = {}; }
+  return { closeOtherDrawers: s.closeOtherDrawers !== false };
+}
+let settings = loadSettings();
+function saveSettings(){ try{ localStorage.setItem('gv_settings', JSON.stringify(settings)); }catch(e){} }
+
+// Local calendar date (YYYY-MM-DD). toISOString() is UTC, which flips to "tomorrow" in the evening in US time zones.
+function localDateStr(d){
+  d = d || new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 let exerciseDrawerInitialized = false;
 let editingWeekKey = null;
 let deleteConfirmWeekKey = null;
@@ -310,7 +326,7 @@ function resetViewState(){
   renamingDay = false;
   removeExerciseConfirmId = null;
   openDrawers = new Set();
-  openExerciseId = null;
+  openExerciseIds = new Set();
   exerciseDrawerInitialized = false;
   editingWeekKey = null;
   deleteConfirmWeekKey = null;
@@ -506,6 +522,23 @@ function renderBackupSection(){
   document.getElementById('restoreFileInput').addEventListener('change', (e)=>{
     if(e.target.files[0]) restoreFromFileInput(e.target.files[0]);
   });
+}
+
+function renderTrainSettingsSection(){
+  const el = document.getElementById('trainSettingsSection');
+  if(!el) return;
+  el.innerHTML = `
+    <h2 class="section-title" style="margin-bottom:6px;">Train screen</h2>
+    <p class="hint">When you open an exercise drawer:</p>
+    <div class="day-tabs" style="margin-bottom:0;">
+      <div class="day-chip ${settings.closeOtherDrawers?'active':''}" data-drawer-mode="close" style="min-width:0;">Close the others</div>
+      <div class="day-chip ${!settings.closeOtherDrawers?'active':''}" data-drawer-mode="keep" style="min-width:0;">Leave them open</div>
+    </div>`;
+  el.querySelectorAll('[data-drawer-mode]').forEach(chip=>chip.addEventListener('click', ()=>{
+    settings.closeOtherDrawers = chip.dataset.drawerMode === 'close';
+    saveSettings();
+    renderTrainSettingsSection();
+  }));
 }
 
 function showToast(msg){
@@ -1511,8 +1544,17 @@ function badgeHTML(reco){
 }
 
 // ---------- Train tab ----------
+function weekFinishTime(w){
+  if(typeof w.completedAt === 'number') return w.completedAt;
+  if(w.date && w.date !== 'imported'){
+    const t = new Date(w.date + 'T12:00:00').getTime(); // older weeks only have a date; treat as midday local
+    return isNaN(t) ? null : t;
+  }
+  return null;
+}
+
 function lastTrainedTime(day){
-  const times = day.weeks.filter(w=>w.completed && w.date && w.date!=='imported').map(w=>new Date(w.date).getTime()).filter(t=>!isNaN(t));
+  const times = day.weeks.filter(w=>w.completed).map(weekFinishTime).filter(t=>t!==null);
   return times.length ? Math.max(...times) : null;
 }
 
@@ -1522,17 +1564,35 @@ function getSuggestedNextWorkout(){
   let lastTrainedDay = null, lastAt = null;
   days.forEach(d=>{
     const t = lastTrainedTime(d);
-    if(t !== null && (lastAt === null || t > lastAt)){ lastAt = t; lastTrainedDay = d; }
+    // >= so that on a tie (older weeks only have a date) the later workout in build order counts as the last one done
+    if(t !== null && (lastAt === null || t >= lastAt)){ lastAt = t; lastTrainedDay = d; }
   });
   if(!lastTrainedDay) return days[0];
   const idx = days.findIndex(d=>d.name===lastTrainedDay.name);
   return days[(idx+1) % days.length];
 }
 
+function trainProgramPickerHTML(){
+  // Only shown once there is more than one program
+  if(store.programs.length < 2) return '';
+  const progs = [...store.programs].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  return `<div class="day-tabs" style="margin-bottom:12px;">
+    <select id="trainProgramSelect" class="pill-select">
+      ${progs.map(p=>`<option value="${esc(p.id)}" ${p.id===store.activeProgramId?'selected':''}>${esc(p.name)}</option>`).join('')}
+    </select></div>`;
+}
+
+function attachTrainProgramPicker(){
+  const sel = document.getElementById('trainProgramSelect');
+  if(!sel) return;
+  sel.addEventListener('change', (e)=>{ activateProgram(e.target.value); renderTrain(); });
+}
+
 function renderTrain(){
   const container = document.getElementById('trainContent');
   if(!program.days.length){
-    container.innerHTML = '<div class="empty-state"><div class="big">No program yet</div>Build a day in the Build tab first.</div>';
+    container.innerHTML = trainProgramPickerHTML() + '<div class="empty-state"><div class="big">No workouts in this program yet</div>Build a day in the Build tab first.</div>';
+    attachTrainProgramPicker();
     return;
   }
   if(activeTrainDay && !program.days.find(d=>d.name===activeTrainDay)) activeTrainDay = null;
@@ -1542,14 +1602,15 @@ function renderTrain(){
     const suggestedName = suggested ? suggested.name : null;
     const days = orderedDays();
     container.innerHTML = `
-      ${programLabelHTML()}
+      ${trainProgramPickerHTML()}
       <h2 class="section-title">Which workout are you doing?</h2>
       <div class="day-tabs" id="trainDaySelect">${days.map(d=>{
         const isNext = d.name === suggestedName;
         return `<div class="day-chip ${isNext?'active':''}" data-day="${d.name}">${d.name}</div>`;
       }).join('')}</div>
     `;
-    document.querySelectorAll('#trainDaySelect .day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeTrainDay = chip.dataset.day; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseId = null; exerciseDrawerInitialized = false; renderTrain(); }));
+    attachTrainProgramPicker();
+    document.querySelectorAll('#trainDaySelect .day-chip').forEach(chip=>chip.addEventListener('click', ()=>{ activeTrainDay = chip.dataset.day; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseIds = new Set(); exerciseDrawerInitialized = false; renderTrain(); }));
     return;
   }
 
@@ -1565,7 +1626,7 @@ function renderTrain(){
   }
 
   if(day.weeks.length === 0){
-    day.weeks.push({number:1, date:new Date().toISOString().slice(0,10), completed:false, exerciseSets:{}});
+    day.weeks.push({number:1, date:localDateStr(), completed:false, exerciseSets:{}});
     saveProgram();
   }
 
@@ -1581,7 +1642,7 @@ function renderTrain(){
 
     let bodyHTML;
     if(isEditing){
-      const dateVal = (w.date && w.date !== 'imported') ? w.date : new Date().toISOString().slice(0,10);
+      const dateVal = (w.date && w.date !== 'imported') ? w.date : localDateStr();
       const editRows = day.exercises.map(ex=>{
         const sets = w.exerciseSets[ex.id] || [];
         const rows = Array.from({length: ex.sets}).map((_,i)=>{
@@ -1620,14 +1681,14 @@ function renderTrain(){
 
   if(activeWeek){
     if(!exerciseDrawerInitialized){
-      openExerciseId = activeExercises[0] ? activeExercises[0].id : null;
+      openExerciseIds = new Set(activeExercises[0] ? [activeExercises[0].id] : []);
       exerciseDrawerInitialized = true;
     }
     const exercisesHTML = activeExercises.map(ex=>{
       const reco = getRecommendation(day, ex, activeWeek.number);
       const ghostClass = 'ghost-' + reco.type;
       const draft = activeWeek.exerciseSets[ex.id];
-      const isOpen = openExerciseId === ex.id;
+      const isOpen = openExerciseIds.has(ex.id);
       const setRows = Array.from({length: ex.sets}).map((_,i)=>{
         const target = getSetTarget(ex, i);
         const prevSet = reco.prev ? (reco.prev.sets[i] || {}) : null;
@@ -1711,7 +1772,7 @@ function renderTrain(){
     ${drawersHTML}
   `;
 
-  document.getElementById('changeWorkoutLink').addEventListener('click', (e)=>{ e.preventDefault(); activeTrainDay = null; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseId = null; exerciseDrawerInitialized = false; renderTrain(); });
+  document.getElementById('changeWorkoutLink').addEventListener('click', (e)=>{ e.preventDefault(); activeTrainDay = null; editingWeekKey = null; deleteConfirmWeekKey = null; openExerciseIds = new Set(); exerciseDrawerInitialized = false; renderTrain(); });
   document.querySelectorAll('[data-toggle-drawer]').forEach(hdr=>{
     hdr.addEventListener('click', ()=>{
       const key = hdr.dataset.toggleDrawer;
@@ -1722,11 +1783,23 @@ function renderTrain(){
   document.querySelectorAll('[data-toggle-exercise]').forEach(hdr=>{
     hdr.addEventListener('click', ()=>{
       const id = hdr.dataset.toggleExercise;
-      openExerciseId = (openExerciseId === id) ? null : id;
+      if(openExerciseIds.has(id)) openExerciseIds.delete(id);
+      else { if(settings.closeOtherDrawers) openExerciseIds.clear(); openExerciseIds.add(id); }
       renderTrain();
     });
   });
-  document.querySelectorAll('.set-row input').forEach(inp=>inp.addEventListener('focus', ()=> inp.select()));
+  // Any tap on a value selects all of it, so typing replaces it (focus alone isn't enough on phones)
+  document.querySelectorAll('.set-row input').forEach(inp=>{
+    let typed = false; // once typing starts, never re-select (would swallow the first digit)
+    const selectAll = ()=>{ if(typed) return; try{ inp.select(); }catch(e){} };
+    const onTap = ()=>{ typed = false; selectAll(); setTimeout(selectAll, 0); };
+    let justFocused = false;
+    inp.addEventListener('focus', ()=>{ justFocused = true; onTap(); });
+    inp.addEventListener('mouseup', (e)=>{ if(justFocused){ e.preventDefault(); justFocused = false; } });
+    inp.addEventListener('touchend', onTap);
+    inp.addEventListener('click', onTap);
+    inp.addEventListener('input', ()=>{ typed = true; });
+  });
   document.querySelectorAll('.set-row input').forEach(inp=>inp.addEventListener('input', ()=>{ inp.classList.remove('ghost-increase','ghost-maintain','ghost-decrease'); }));
 
   if(activeWeek){
@@ -1801,7 +1874,11 @@ function renderTrain(){
     const num = weekNumberFromKey(btn.dataset.saveEdit);
     const w = day.weeks.find(x=>x.number===num);
     const dateInput = document.getElementById('editWeekDateInput');
-    if(dateInput && dateInput.value) w.date = dateInput.value;
+    // Only restamp when the date was actually changed (an untouched imported week stays 'imported')
+    if(dateInput && dateInput.value && dateInput.value !== (w.date && w.date !== 'imported' ? w.date : localDateStr())){
+      w.date = dateInput.value;
+      w.completedAt = new Date(dateInput.value + 'T12:00:00').getTime();
+    }
     day.exercises.forEach(ex=>{
       const inputs = document.querySelectorAll(`[data-editex="${ex.id}"]`);
       const setsData = {};
@@ -1819,7 +1896,7 @@ function renderTrain(){
     document.getElementById('saveWeekBtn').addEventListener('click', ()=> saveActiveWeek(day, activeWeek));
   } else {
     document.getElementById('startWeekBtn').addEventListener('click', ()=>{
-      day.weeks.push({number: lastWeek.number+1, date:new Date().toISOString().slice(0,10), completed:false, exerciseSets:{}});
+      day.weeks.push({number: lastWeek.number+1, date:localDateStr(), completed:false, exerciseSets:{}});
       saveProgram();
       renderTrain();
     });
@@ -1842,13 +1919,14 @@ function saveActiveWeek(day, week){
 
   if(savedCount === 0){ showToast('Log at least one set before saving'); return; }
   week.completed = true;
-  week.date = new Date().toISOString().slice(0,10);
+  week.date = localDateStr();
+  week.completedAt = Date.now(); // exact finish time, used to decide which workout is next
   saveProgram();
   showToast('Week ' + week.number + ' saved');
   activeTrainDay = null;
   editingWeekKey = null;
   deleteConfirmWeekKey = null;
-  openExerciseId = null;
+  openExerciseIds = new Set();
   exerciseDrawerInitialized = false;
   renderTrain();
 }
@@ -1904,6 +1982,7 @@ function renderExerciseHistory(day){
 
 // ---------- Init ----------
 renderBuild();
+renderTrainSettingsSection();
 initBackup();
 </script>
 </body>

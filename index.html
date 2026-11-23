@@ -108,6 +108,7 @@
   .badge-maintain{background:var(--grey-soft-bg);color:var(--text-muted);}
   .badge-decrease{background:var(--rose-soft);color:var(--rose);}
   .badge-new{background:var(--grey-soft-bg);color:var(--text-muted);}
+  .badge-mixed{background:var(--grey-soft-bg);color:var(--text);}
 
   .reco-text{font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.4;}
 
@@ -1489,25 +1490,16 @@ function avgRPE(sets){
   return rpes.reduce((a,b)=>a+b,0) / rpes.length;
 }
 
+// Each set is judged on its own: its reps vs that set's target, and that set's own RPE.
 function getRecommendation(day, exercise, beforeWeekNumber){
   const prev = getPreviousCompletedWeekData(day, exercise.id, beforeWeekNumber);
   if(!prev){
-    return { type:'new', label:'First Session', detail:'No history yet for this exercise in this workout — hit the target ranges shown and log your actual numbers.', prev:null };
+    return { type:'new', label:'First Session', detail:'No history yet for this exercise in this workout — hit the target ranges shown and log your actual numbers.', prev:null, setRecos:[] };
   }
-  const reps = prev.sets.map(s=>s.reps);
-  const rpe = avgRPE(prev.sets);
   const isBodyweight = exercise.unit === 'bw';
   const isBand = exercise.unit === 'band';
   const increment = exercise.unit === 'kg' ? 2.5 : 5;
 
-  let hitMax = true, hitMin = true;
-  reps.forEach((r,i)=>{
-    const t = getSetTarget(exercise, i);
-    if(r < t.repMax) hitMax = false;
-    if(r < t.repMin) hitMin = false;
-  });
-
-  let type, label, detail;
   const increaseAction = isBand
     ? `move to a lighter band — reduce assistance by ${increment} lbs`
     : isBodyweight
@@ -1519,27 +1511,42 @@ function getRecommendation(day, exercise, beforeWeekNumber){
     ? `ease off with fewer reps, more rest, or drop ${increment} lbs of any added weight you're using`
     : (increment ? `consider dropping ${increment} ${exercise.unit} or focusing on form` : 'consider an easier variation or more rest');
 
-  if(rpe !== null && rpe <= 6){
-    type='increase'; label='Increase';
-    detail = `RPE was only ${rpe.toFixed(1)} last week — that's an easy effort regardless of reps hit, so ${increaseAction}.`;
-  } else if(hitMax && (rpe===null || rpe <= 8)){
-    type='increase'; label='Increase';
-    detail = `Hit the top of every set's rep target last week` + (rpe!==null ? ` at RPE ${rpe.toFixed(1)} — room to push harder.` : '.') + ` Try to ${increaseAction}.`;
-  } else if(hitMax && rpe > 8){
-    type='maintain'; label='Maintain';
-    detail = `Hit the top of your targets, but RPE was ${rpe.toFixed(1)} — that was close to max effort. Hold steady and let reps stabilize before pushing further.`;
-  } else if(hitMin){
-    type='maintain'; label='Maintain';
-    detail = `Hit the low end of your targets but not the top on every set. Keep things as they are and push for more reps next time.`;
+  const setRecos = Array.from({length: exercise.sets}).map((_,i)=>{
+    const s = prev.sets[i];
+    if(!s || s.reps === null || s.reps === undefined || s.reps === '') return { type:'new', label:'New', detail:'No data for this set last week.' };
+    const t = getSetTarget(exercise, i);
+    const reps = Number(s.reps);
+    const rpe = s.rpe > 0 ? Number(s.rpe) : null;
+    if(rpe !== null && rpe <= 6)
+      return { type:'increase', label:'Increase', detail:`RPE was only ${rpe} — an easy effort regardless of reps, so ${increaseAction}.` };
+    if(reps >= t.repMax && (rpe === null || rpe <= 8))
+      return { type:'increase', label:'Increase', detail:`Hit the top of the target (${t.repMax})` + (rpe !== null ? ` at RPE ${rpe}` : '') + ` — ${increaseAction}.` };
+    if(reps >= t.repMax)
+      return { type:'maintain', label:'Maintain', detail:`Hit the top of the target, but RPE ${rpe} was close to max effort. Hold the weight and let it settle.` };
+    if(reps >= t.repMin)
+      return { type:'maintain', label:'Maintain', detail:`In range (${reps} reps) but not at the top (${t.repMax}). Keep the weight and push for more reps.` };
+    return { type:'decrease', label:'Lower', detail:`Missed the target (${reps} reps vs ${t.repMin}+). Maybe ${decreaseAction}.` };
+  });
+
+  // Sets with no data last week (e.g. you added a set) don't count toward the exercise-level badge
+  const known = setRecos.filter(r=>r.type !== 'new');
+  const types = [...new Set(known.map(r=>r.type))];
+  let type, label, detail;
+  if(types.length === 0){
+    type = 'new'; label = 'First Session'; detail = 'No data for these sets last week.';
+  } else if(types.length === 1){
+    type = types[0];
+    label = known[0].label;
+    detail = (known.length > 1 ? 'Every set: ' : '') + known[0].detail;
   } else {
-    type='decrease'; label='Lower';
-    detail = `Missed the rep target on at least one set last week. Maybe ${decreaseAction}.`;
+    type = 'mixed'; label = 'Mixed';
+    detail = setRecos.map((r,i)=>r.type === 'new' ? '' : `Set ${i+1} — ${r.label}: ${r.detail}`).filter(Boolean).join('<br>');
   }
-  return { type, label, detail, prev, increment, isBodyweight, isBand };
+  return { type, label, detail, prev, increment, isBodyweight, isBand, setRecos };
 }
 
 function badgeHTML(reco){
-  const icons = { new:'—', increase:'▲', maintain:'●', decrease:'▼' };
+  const icons = { new:'—', increase:'▲', maintain:'●', decrease:'▼', mixed:'◐' };
   return `<div class="plate-badge badge-${reco.type}"><span class="ring">${icons[reco.type]}</span>${reco.label}</div>`;
 }
 
@@ -1686,26 +1693,28 @@ function renderTrain(){
     }
     const exercisesHTML = activeExercises.map(ex=>{
       const reco = getRecommendation(day, ex, activeWeek.number);
-      const ghostClass = 'ghost-' + reco.type;
       const draft = activeWeek.exerciseSets[ex.id];
       const isOpen = openExerciseIds.has(ex.id);
       const setRows = Array.from({length: ex.sets}).map((_,i)=>{
         const target = getSetTarget(ex, i);
-        const prevSet = reco.prev ? (reco.prev.sets[i] || {}) : null;
+        const setReco = reco.setRecos && reco.setRecos[i] ? reco.setRecos[i] : { type:'new' };
+        const hasPrev = setReco.type !== 'new';
+        const prevSet = hasPrev ? reco.prev.sets[i] : null;
+        const ghostClass = 'ghost-' + setReco.type;
         let suggestedWeight = '';
-        if(prevSet && prevSet.weight !== undefined){
-          if(reco.type === 'increase') suggestedWeight = reco.isBand ? Math.max(0, prevSet.weight - reco.increment) : prevSet.weight + reco.increment;
-          else if(reco.type === 'decrease') suggestedWeight = reco.isBand ? prevSet.weight + reco.increment : Math.max(0, prevSet.weight - reco.increment);
+        if(prevSet && prevSet.weight !== undefined && prevSet.weight !== null){
+          if(setReco.type === 'increase') suggestedWeight = reco.isBand ? Math.max(0, prevSet.weight - reco.increment) : prevSet.weight + reco.increment;
+          else if(setReco.type === 'decrease') suggestedWeight = reco.isBand ? prevSet.weight + reco.increment : Math.max(0, prevSet.weight - reco.increment);
           else suggestedWeight = prevSet.weight;
         }
-        const isWeightChange = reco.type === 'increase' || reco.type === 'decrease';
+        const isWeightChange = setReco.type === 'increase' || setReco.type === 'decrease';
         const repsPlaceholder = prevSet ? (isWeightChange ? `${target.repMin}-${target.repMax}` : (prevSet.reps ?? 'reps')) : `${target.repMin}-${target.repMax}`;
-        const weightPlaceholder = prevSet ? (suggestedWeight !== '' ? suggestedWeight : 'wt') : (i===0 && ex.weight ? ex.weight : 'wt');
+        const weightPlaceholder = prevSet ? (suggestedWeight !== '' ? suggestedWeight : 'wt') : (!reco.prev && i===0 && ex.weight ? ex.weight : 'wt');
         const rpePlaceholder = prevSet ? (isWeightChange ? ex.idealRpe : (prevSet.rpe ?? 'rpe')) : ex.idealRpe;
 
         const draftSet = draft ? draft[i] : undefined;
         const repsGhostVal = prevSet ? (isWeightChange ? '' : (prevSet.reps ?? '')) : '';
-        const weightGhostVal = prevSet ? suggestedWeight : (i===0 ? (ex.weight || '') : '');
+        const weightGhostVal = prevSet ? suggestedWeight : (!reco.prev && i===0 ? (ex.weight || '') : '');
         const rpeGhostVal = prevSet ? (isWeightChange ? '' : (prevSet.rpe ?? '')) : '';
 
         function fieldAttr(field, ghostVal, placeholderVal){

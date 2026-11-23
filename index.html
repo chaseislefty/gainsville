@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GAINSVILLE</title>
+<title>INTENTION</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -27,7 +27,7 @@
   .wrap{max-width:720px;margin:0 auto;padding:20px 16px 90px;}
 
   header{display:flex;align-items:baseline;justify-content:space-between;padding:18px 0 14px;border-bottom:2px solid var(--line);margin-bottom:18px;}
-  .wordmark{font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;letter-spacing:2px;color:var(--text);}
+  .wordmark{font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;letter-spacing:3px;color:var(--text);-webkit-text-stroke:2px var(--purple);paint-order:stroke fill;}
   .wordmark span{color:var(--purple);}
   .tagline{font-size:11px;color:var(--text-muted);letter-spacing:1.5px;text-transform:uppercase;}
 
@@ -147,7 +147,7 @@
 
   <header>
     <div>
-      <div class="wordmark">GAINS<span>VILLE</span></div>
+      <div class="wordmark">INTENTION</div>
       <div class="tagline">Build. Log. Adjust.</div>
     </div>
     <button id="settingsBtn" aria-label="Settings" style="background:transparent;border:none;padding:0;cursor:pointer;width:44px;height:44px;display:flex;align-items:center;justify-content:center;">
@@ -407,7 +407,7 @@ async function writeBackupFile(){
 async function connectBackupFile(){
   try{
     const handle = await window.showSaveFilePicker({
-      suggestedName: 'gainsville-backup.json',
+      suggestedName: 'intention-backup.json',
       types: [{ description:'JSON Backup', accept: {'application/json': ['.json']} }]
     });
     backupFileHandle = handle;
@@ -442,7 +442,7 @@ function downloadBackupNow(){
   const blob = new Blob([backupPayload()], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'gainsville-backup-' + new Date().toISOString().slice(0,10) + '.json'; a.click();
+  a.href = url; a.download = 'intention-backup-' + new Date().toISOString().slice(0,10) + '.json'; a.click();
   URL.revokeObjectURL(url);
   showToast('Backup downloaded');
 }
@@ -1756,7 +1756,7 @@ function renderTrain(){
     const dotColor = { increase: 'var(--purple-soft)', maintain: 'var(--text-muted)', decrease: 'var(--rose)' };
     const summaryHTML = legend.map(d=>`<div class="reco-text" style="margin-bottom:8px;display:flex;align-items:baseline;gap:8px;"><span style="color:${dotColor[d.type]};flex-shrink:0;">&bull;</span><span>${d.text}</span></div>`).join('');
 
-    const swapReminderHTML = (activeWeek.number % 6 === 0) ? `<div style="background:var(--surface-2);border-left:3px solid var(--purple-soft);border-radius:4px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--text);">Week ${activeWeek.number} — this is usually a good point to swap out a few exercises to keep progressing.</div>` : '';
+    const swapReminderHTML = (activeWeek.number > 1 && (activeWeek.number - 1) % 6 === 0) ? `<div style="background:var(--surface-2);border-left:3px solid var(--purple-soft);border-radius:4px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--text);">You've completed ${activeWeek.number - 1} weeks of this workout — a good point to swap out a few exercises this week.</div>` : '';
 
     activeSectionHTML = `<h2 class="section-title">Week ${activeWeek.number} — in progress</h2>${swapReminderHTML}<div style="margin-bottom:14px;">${summaryHTML}</div>${exercisesHTML}<div class="btn-row" style="margin-bottom:24px;align-items:center;">
       <button class="btn" id="saveWeekBtn">Save Week ${activeWeek.number}</button>
@@ -1848,7 +1848,8 @@ function renderTrain(){
         };
         repsInput.addEventListener('input', checkSet);
         rpeInput.addEventListener('input', checkSet);
-        checkSet();
+        // Per-set coaching text only reacts to numbers you logged, never to last week's pre-filled suggestions
+        if(!/ghost-/.test(repsInput.className) && !/ghost-/.test(rpeInput.className)) checkSet();
       }
     });
   }
